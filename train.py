@@ -18,6 +18,7 @@ from diffusers.optimization import get_scheduler
 # from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from gcdp.episodes import (
     get_random_rollout,
+    get_guided_rollout,
     split_trajectory,
     PushTDatasetFromTrajectories,
 )
@@ -43,19 +44,30 @@ demonstration = np.load("objects/demonstration_statistics.npz", allow_pickle=Tru
 demonstration_statistics = {key: demonstration[key].item() for key in demonstration}
 demonstration.close()
 
+network_params = {
+    "obs_horizon": 2,
+    "pred_horizon": 16,
+    "action_horizon": 8,
+    "action_dim": 2,
+    "num_diffusion_iters": 100,
+    "batch_size": 64,
+    "policy_refinement": 2,
+    "num_epochs": 1,
+    "episode_length": 50,
+    "num_episodes": 10,
+}
+
 ### Prediction parameters
-pred_horizon = 16
-obs_horizon = 2
-action_horizon = 8
-
+pred_horizon = network_params["pred_horizon"]
+obs_horizon = network_params["obs_horizon"]
+action_horizon = network_params["action_horizon"]
 ### Training parameters
-policy_refinement = 1
-num_epochs = 10
-batch_size = 64
-num_diffusion_iters = 100
+policy_refinement = network_params["policy_refinement"]
+num_epochs = network_params["num_epochs"]
+batch_size = network_params["batch_size"]
 
-episode_length = 50
-num_episodes = 10
+episode_length = network_params["episode_length"]
+num_episodes = network_params["num_episodes"]
 
 
 ### Networks definition
@@ -69,7 +81,7 @@ vision_feature_dim = 512
 lowdim_obs_dim = 2
 # observation feature has 514 dims in total per step
 obs_dim = vision_feature_dim + lowdim_obs_dim  # 514
-action_dim = 2
+action_dim = network_params["action_dim"]  # 2
 goal_dim = vision_feature_dim + lowdim_obs_dim  # 514
 # create network object
 noise_pred_net = ConditionalUnet1D(
@@ -81,7 +93,7 @@ nets = nn.ModuleDict(
     {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
 )
 # for this demo, we use DDPMScheduler with 100 diffusion iterations
-num_diffusion_iters = 100
+num_diffusion_iters = network_params["num_diffusion_iters"]
 noise_scheduler = DDPMScheduler(
     num_train_timesteps=num_diffusion_iters,
     # the choise of beta schedule has big impact on performance
@@ -144,7 +156,38 @@ for p in range(policy_refinement):
             num_training_steps=len(dataloader) * num_epochs,
         )
     else:
-        raise NotImplementedError("Policy Refinement > 0 not implemented")
+        trajectories = [
+            get_guided_rollout(
+                episode_length=episode_length,
+                env=env,
+                model=nets,
+                device=device,
+                network_params=network_params,
+                normalization_stats=demonstration_statistics,
+                noise_scheduler=noise_scheduler,
+            ) for _ in range(num_episodes)
+        ]
+        # update dataset
+        dataset = PushTDatasetFromTrajectories(
+            trajectories,
+            pred_horizon=pred_horizon,
+            obs_horizon=obs_horizon,
+            action_horizon=action_horizon,
+            get_original_goal=False,
+            dataset_statistics=demonstration_statistics,
+        )
+        # update dataloader
+        dataloader = torch.utils.data.DataLoader(
+            dataset,
+            batch_size=64,
+            num_workers=0,
+            shuffle=True,
+            # accelerate cpu-gpu transfer
+            pin_memory=True,
+            # don't kill worker process afte each epoch
+            persistent_workers=False,
+        )
+        print("Dataloading OK")
     
     # training loop
     print(f"Policy Refinement {p}")

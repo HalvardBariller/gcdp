@@ -1,11 +1,13 @@
+import collections
 import gymnasium as gym
 import gym_pusht
 import numpy as np
 import torch
 
-# from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+from diffusers import DDPMScheduler
 
-from gcdp.utils import ScaleRewardWrapper
+from gcdp.policy import diff_policy
+from gcdp.utils import ScaleRewardWrapper, normalize_data, unnormalize_data
 
 
 def get_random_rollout(episode_length=50, env=None):
@@ -33,15 +35,71 @@ def get_random_rollout(episode_length=50, env=None):
     actions = []
     reached_goals = []
     for _ in range(episode_length):
-        # if policy is not None:
-        #     # action = get_action(policy,
-        #     #                     state=s,
-        #     #                     goal=desired_goal,
-        #     #                     horizon ?)
-        #     raise NotImplementedError
         action = env.action_space.sample()
-
         states.append(s)
+        actions.append(action)
+        s, _, _, _, _ = env.step(action)
+        reached_goals.append(s)
+
+    return {
+        "states": states,
+        "actions": actions,
+        "reached_goals": reached_goals,
+        "desired_goal": desired_goal,
+    }
+
+def get_guided_rollout(
+        episode_length=50, 
+        env=None,
+        model: torch.ModuleDict = None,
+        device: torch.device = None,
+        network_params: dict = None,
+        normalization_stats: dict = None,
+        noise_scheduler: DDPMScheduler = None,
+    ):
+    """
+    Simulate an episode of the environment using the given policy.
+    Inputs:
+        episode_length : length of the simulation
+        env : gym environment
+        model: the model used to predict the action (vision and noise models)
+        noise_scheduler: the scheduler used to diffuse the noise
+        device: the device to use
+        network_params: the parameters of the network
+        normalization_stats: the statistics used to normalize the data
+    Outputs: dict containing the following
+        states : list of states (dicts) of the agent
+        actions : list of actions taken by the agent
+        reached_goals : list of states (dicts) of the agent after taking the actions
+        desired_goal : the goal that the agent was trying to reach
+    """
+    if env is None:
+        env = gym.make(
+            "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
+        )
+        env = ScaleRewardWrapper(env)
+    # desired_goal = env.observation_space.sample() # Random samp. had no meaning
+    desired_goal, _ = env.reset()  # Reset is random
+    s, _ = env.reset()
+    states = []
+    actions = []
+    reached_goals = []
+    observations = collections.deque(
+        [s] * network_params["obs_horizon"], 
+        maxlen=network_params["obs_horizon"],
+        )
+    for _ in range(episode_length):
+        action = diff_policy(
+            model=model,
+            noise_scheduler=noise_scheduler,
+            observations=observations,
+            goal=desired_goal,
+            device=device,
+            network_params=network_params,
+            normalization_stats=normalization_stats,
+        )
+        states.append(s)
+        observations.append(s)
         actions.append(action)
         s, _, _, _, _ = env.step(action)
         reached_goals.append(s)
@@ -157,31 +215,7 @@ def sample_sequence(
     return result
 
 
-# normalize data
-def get_data_stats(data):
-    data = data.reshape(-1, data.shape[-1])
-    stats = {"min": np.min(data, axis=0), "max": np.max(data, axis=0)}
-    return stats
 
-
-def normalize_data(data, stats):
-    # Convert entries to np arrays
-    if not isinstance(data, np.ndarray):
-        data = np.array(data)
-    for key in stats.keys():
-        if not isinstance(stats[key], np.ndarray):
-            stats[key] = np.array(stats[key])
-    # normalize to [0,1]
-    ndata = (data - stats["min"]) / (stats["max"] - stats["min"])
-    # normalize to [-1, 1]
-    ndata = ndata * 2 - 1
-    return ndata
-
-
-def unnormalize_data(ndata, stats):
-    ndata = (ndata + 1) / 2
-    data = ndata * (stats["max"] - stats["min"]) + stats["min"]
-    return data
 
 
 class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
