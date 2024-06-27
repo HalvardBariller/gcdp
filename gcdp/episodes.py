@@ -3,9 +3,9 @@ import gym_pusht
 import numpy as np
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+# from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
-from rl_playground.utils import ScaleRewardWrapper
+from gcdp.utils import ScaleRewardWrapper
 
 
 def get_rollout(episode_length=50, policy=None, env=None):

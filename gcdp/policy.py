@@ -6,20 +6,20 @@ import torch
 
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
-from rl_playground.episodes import normalize_data, unnormalize_data
-from rl_playground.utils import ScaleRewardWrapper
+from gcdp.episodes import normalize_data, unnormalize_data
+from gcdp.utils import ScaleRewardWrapper
 
 
 from diffusers import DDPMScheduler
 from diffusers.optimization import get_scheduler
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from rl_playground.episodes import (
+from gcdp.episodes import (
     get_rollout,
     split_trajectory,
     PushTDatasetFromTrajectories,
 )
-from rl_playground.utils import ScaleRewardWrapper, record_video
-from rl_playground.diffusion import (
+from gcdp.utils import ScaleRewardWrapper, record_video
+from gcdp.diffusion import (
     get_resnet,
     replace_bn_with_gn,
     ConditionalUnet1D,

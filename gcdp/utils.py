@@ -64,37 +64,4 @@ class ScaleRewardWrapper(gym.RewardWrapper):
         return (next_state, reward, term, trunc, info)
 
 
-# def get_rollout(episode_length=50, policy=None, env=None):
-#     """
-#     input
-#     episode_length : length of the simulation
-#     policy : either a deterministic policy or a uniform random policy
-#     env : gym environment
-#     """
-#     if env is None:
-#         env = gym.make("gym_pusht/PushT-v0")
-#     s, _ = env.reset()
-#     desired_goal = env.observation_space.sample()
-#     done = False
-#     h = 0
-#     states = []
-#     actions = []
-#     while not done:
-#         if policy is not None:
-#             # action = get_action(policy,
-#             #                     state=s,
-#             #                     goal=desired_goal,
-#             #                     horizon ?)
-#             raise NotImplementedError
-#         else:
-#             action = env.action_space.sample()
-#         s, _, term, trunc, infos = env.step(action)
-#         states.append(s)
-#         actions.append(action)
-#         h += 1
-#         done = (term or trunc) or h >= episode_length
-#     return {
-#         "states": np.array(states),
-#         "actions": np.array(actions),
-#         "desired_goal": desired_goal,
-#     }
+
