@@ -17,7 +17,7 @@ from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 # from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from gcdp.episodes import (
-    get_rollout,
+    get_random_rollout,
     split_trajectory,
     PushTDatasetFromTrajectories,
 )
@@ -40,9 +40,8 @@ env = ScaleRewardWrapper(env)
 #     k: demonstrations.stats[k] for k in ["action", "observation.state"]
 # }
 demonstration = np.load("objects/demonstration_statistics.npz", allow_pickle=True)
-demonstration_statistics = {key: demonstration[key] for key in demonstration}
+demonstration_statistics = {key: demonstration[key].item() for key in demonstration}
 demonstration.close()
-print(demonstration_statistics)
 
 ### Prediction parameters
 pred_horizon = 16
@@ -114,7 +113,7 @@ optimizer = torch.optim.AdamW(
 for p in range(policy_refinement):
     if p == 0:
         trajectories = [
-            get_rollout(episode_length=episode_length, policy=None, env=env)
+            get_random_rollout(episode_length=episode_length, env=env)
             for _ in range(num_episodes)
         ]
         # create dataset

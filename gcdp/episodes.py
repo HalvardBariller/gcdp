@@ -8,12 +8,11 @@ import torch
 from gcdp.utils import ScaleRewardWrapper
 
 
-def get_rollout(episode_length=50, policy=None, env=None):
+def get_random_rollout(episode_length=50, env=None):
     """
     Simulate an episode of the environment using the given policy.
     Inputs:
         episode_length : length of the simulation
-        policy : either a deterministic policy or a uniform random policy
         env : gym environment
     Outputs: dict containing the following keys:
         states : list of states (dicts) of the agent
@@ -34,14 +33,13 @@ def get_rollout(episode_length=50, policy=None, env=None):
     actions = []
     reached_goals = []
     for _ in range(episode_length):
-        if policy is not None:
-            # action = get_action(policy,
-            #                     state=s,
-            #                     goal=desired_goal,
-            #                     horizon ?)
-            raise NotImplementedError
-        else:
-            action = env.action_space.sample()
+        # if policy is not None:
+        #     # action = get_action(policy,
+        #     #                     state=s,
+        #     #                     goal=desired_goal,
+        #     #                     horizon ?)
+        #     raise NotImplementedError
+        action = env.action_space.sample()
 
         states.append(s)
         actions.append(action)
@@ -136,7 +134,7 @@ def sample_sequence(
     for key, input_arr in train_data.items():
         if "reached_goal" in key:
             # Take the reached goal at the end of the sequence
-            result[key] = input_arr[buffer_end_idx]
+            result[key] = input_arr[buffer_end_idx - 1]
             continue
         if "desired_goal" in key:
             # Count the number of values in the episode_ends array that are less than buffer_start_idx
@@ -331,4 +329,5 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         # discard unused observations
         nsample["image"] = nsample["image"][: self.obs_horizon, :]
         nsample["agent_pos"] = nsample["agent_pos"][: self.obs_horizon, :]
+
         return nsample
