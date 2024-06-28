@@ -1,18 +1,26 @@
+"""
+This file contains functions that handle the generation of training data.
+
+It includes functions to generate random or guided rollouts in the PushT
+environment, to split the trajectories into different components and
+to create a dataset of transitions from the trajectories.
+"""
+
 import collections
 import gymnasium as gym
-import gym_pusht
 import numpy as np
 import torch
 
 from diffusers import DDPMScheduler
 
 from gcdp.policy import diff_policy
-from gcdp.utils import ScaleRewardWrapper, normalize_data, unnormalize_data
+from gcdp.utils import ScaleRewardWrapper, normalize_data
 
 
 def get_random_rollout(episode_length=50, env=None):
     """
     Simulate an episode of the environment using the given policy.
+
     Inputs:
         episode_length : length of the simulation
         env : gym environment
@@ -24,7 +32,9 @@ def get_random_rollout(episode_length=50, env=None):
     """
     if env is None:
         env = gym.make(
-            "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
         )
         env = ScaleRewardWrapper(env)
     # desired_goal = env.observation_space.sample() # Random samp. had no meaning
@@ -48,17 +58,19 @@ def get_random_rollout(episode_length=50, env=None):
         "desired_goal": desired_goal,
     }
 
+
 def get_guided_rollout(
-        episode_length=50, 
-        env=None,
-        model: torch.ModuleDict = None,
-        device: torch.device = None,
-        network_params: dict = None,
-        normalization_stats: dict = None,
-        noise_scheduler: DDPMScheduler = None,
-    ):
+    episode_length: int,
+    env: gym.Env,
+    model: torch.ModuleDict,
+    device: torch.device,
+    network_params: dict,
+    normalization_stats: dict,
+    noise_scheduler: DDPMScheduler,
+):
     """
     Simulate an episode of the environment using the given policy.
+
     Inputs:
         episode_length : length of the simulation
         env : gym environment
@@ -75,7 +87,9 @@ def get_guided_rollout(
     """
     if env is None:
         env = gym.make(
-            "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
         )
         env = ScaleRewardWrapper(env)
     # desired_goal = env.observation_space.sample() # Random samp. had no meaning
@@ -85,9 +99,9 @@ def get_guided_rollout(
     actions = []
     reached_goals = []
     observations = collections.deque(
-        [s] * network_params["obs_horizon"], 
+        [s] * network_params["obs_horizon"],
         maxlen=network_params["obs_horizon"],
-        )
+    )
     for _ in range(episode_length):
         action = diff_policy(
             model=model,
@@ -114,7 +128,8 @@ def get_guided_rollout(
 
 def split_trajectory(trajectory: dict):
     """
-    Takes a trajectory of length H and splits it into its different components.
+    Take a trajectory of length H and splits it into its different components.
+
     Inputs:
         trajectory: dict containing the states, actions, reached goals and desired goal
                     (from get_rollout function for example)
@@ -133,7 +148,9 @@ def split_trajectory(trajectory: dict):
     reached_goals_agent_pos = np.array(
         [t["agent_pos"] for t in trajectory["reached_goals"]]
     )
-    reached_goals_pixels = np.array([t["pixels"] for t in trajectory["reached_goals"]])
+    reached_goals_pixels = np.array(
+        [t["pixels"] for t in trajectory["reached_goals"]]
+    )
     desired_goal_agent_pos = np.array(trajectory["desired_goal"]["agent_pos"])
     desired_goal_pixels = np.array(trajectory["desired_goal"]["pixels"])
     return {
@@ -142,7 +159,9 @@ def split_trajectory(trajectory: dict):
         "actions": actions,
         "reached_goals_agent_pos": reached_goals_agent_pos,
         "reached_goals_pixels": reached_goals_pixels,
-        "desired_goal_agent_pos": np.expand_dims(desired_goal_agent_pos, axis=0),
+        "desired_goal_agent_pos": np.expand_dims(
+            desired_goal_agent_pos, axis=0
+        ),
         "desired_goal_pixels": np.expand_dims(desired_goal_pixels, axis=0),
     }
 
@@ -153,7 +172,10 @@ def create_sample_indices(
     pad_before: int = 0,
     pad_after: int = 0,
 ):
-    indices = list()
+    # This function was adapted from the implementation of Chi et al. (2021)
+    # https://diffusion-policy.cs.columbia.edu/
+    """Create indices for sampling sequences from the trajectories."""
+    indices = []
     for i in range(len(episode_ends)):
         start_idx = 0
         if i > 0:
@@ -167,13 +189,20 @@ def create_sample_indices(
         # range stops one idx before end
         for idx in range(min_start, max_start + 1):
             buffer_start_idx = max(idx, 0) + start_idx
-            buffer_end_idx = min(idx + sequence_length, episode_length) + start_idx
+            buffer_end_idx = (
+                min(idx + sequence_length, episode_length) + start_idx
+            )
             start_offset = buffer_start_idx - (idx + start_idx)
             end_offset = (idx + sequence_length + start_idx) - buffer_end_idx
             sample_start_idx = 0 + start_offset
             sample_end_idx = sequence_length - end_offset
             indices.append(
-                [buffer_start_idx, buffer_end_idx, sample_start_idx, sample_end_idx]
+                [
+                    buffer_start_idx,
+                    buffer_end_idx,
+                    sample_start_idx,
+                    sample_end_idx,
+                ]
             )
     indices = np.array(indices)
     return indices
@@ -188,7 +217,10 @@ def sample_sequence(
     sample_end_idx,
     episode_ends,
 ):
-    result = dict()
+    # This function was adapted from the implementation of Chi et al. (2021)
+    # https://diffusion-policy.cs.columbia.edu/
+    """Sample a sequence from the training data."""
+    result = {}
     for key, input_arr in train_data.items():
         if "reached_goal" in key:
             # Take the reached goal at the end of the sequence
@@ -204,7 +236,8 @@ def sample_sequence(
         data = sample
         if (sample_start_idx > 0) or (sample_end_idx < sequence_length):
             data = np.zeros(
-                shape=(sequence_length,) + input_arr.shape[1:], dtype=input_arr.dtype
+                shape=(sequence_length,) + input_arr.shape[1:],
+                dtype=input_arr.dtype,
             )
             if sample_start_idx > 0:
                 data[:sample_start_idx] = sample[0]
@@ -215,19 +248,19 @@ def sample_sequence(
     return result
 
 
-
-
-
 class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
+    """Dataset class for the PushT environment."""
+
     def __init__(
         self,
         trajectories: list,
-        pred_horizon: int = 16,
-        obs_horizon: int = 2,
-        action_horizon: int = 8,
-        get_original_goal: bool = False,
-        dataset_statistics: dict = None,
+        pred_horizon: int,
+        obs_horizon: int,
+        action_horizon: int,
+        get_original_goal: bool,
+        dataset_statistics: dict,
     ):
+        """Initialize the dataset."""
         self.trajectories = trajectories  # list of T rollouts
         self.pred_horizon = pred_horizon
         self.action_horizon = action_horizon
@@ -246,9 +279,13 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
             train_image_data.append(split["states_pixels"])
             train_agent_pos_data.append(split["states_agent_pos"])
             train_action_data.append(split["actions"])
-            train_reached_goals_agent_pos.append(split["reached_goals_agent_pos"])
+            train_reached_goals_agent_pos.append(
+                split["reached_goals_agent_pos"]
+            )
             train_reached_goals_image.append(split["reached_goals_pixels"])
-            train_desired_goal_agent_pos.append(split["desired_goal_agent_pos"])
+            train_desired_goal_agent_pos.append(
+                split["desired_goal_agent_pos"]
+            )
             train_desired_goal_image.append(split["desired_goal_pixels"])
 
         # concatenate all trajectories (N transitions = sum over all T, T*H if
@@ -257,9 +294,13 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         # (N, 96, 96, 3)
         train_image_data = np.moveaxis(train_image_data, -1, 1)
         # (N, 3, 96, 96)
-        train_reached_goals_image = np.concatenate(train_reached_goals_image, axis=0)
+        train_reached_goals_image = np.concatenate(
+            train_reached_goals_image, axis=0
+        )
         # (N, 96, 96, 3)
-        train_reached_goals_image = np.moveaxis(train_reached_goals_image, -1, 1)
+        train_reached_goals_image = np.moveaxis(
+            train_reached_goals_image, -1, 1
+        )
         # (N, 3, 96, 96)
         train_goal_image_data = np.concatenate(
             train_desired_goal_image, axis=0
@@ -269,7 +310,9 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         )  # (T, 3, 96, 96)
 
         # Normalize images
-        train_image_data = np.array(train_image_data).astype(np.float32) / 255.0
+        train_image_data = (
+            np.array(train_image_data).astype(np.float32) / 255.0
+        )
         train_reached_goals_image = (
             np.array(train_reached_goals_image).astype(np.float32) / 255.0
         )
@@ -279,7 +322,9 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
 
         if get_original_goal:
             self.train_data = {
-                "agent_pos": np.concatenate(train_agent_pos_data, axis=0),  # (N, 2)
+                "agent_pos": np.concatenate(
+                    train_agent_pos_data, axis=0
+                ),  # (N, 2)
                 "action": np.concatenate(train_action_data, axis=0),  # (N, 2)
                 "image": train_image_data,  # (N, 3, 96, 96)
                 "reached_goal_agent_pos": np.concatenate(
@@ -293,7 +338,9 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
             }
         else:
             self.train_data = {
-                "agent_pos": np.concatenate(train_agent_pos_data, axis=0),  # (N, 2)
+                "agent_pos": np.concatenate(
+                    train_agent_pos_data, axis=0
+                ),  # (N, 2)
                 "action": np.concatenate(train_action_data, axis=0),  # (N, 2)
                 "image": train_image_data,  # (N, 3, 96, 96)
                 "reached_goal_agent_pos": np.concatenate(
@@ -327,14 +374,18 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
                         data, stats["observation.state"]
                     )
                 if "action" in key:
-                    self.train_data[key] = normalize_data(data, stats["action"])
+                    self.train_data[key] = normalize_data(
+                        data, stats["action"]
+                    )
 
     def __len__(self):
+        """Return the number of samples in the dataset."""
         return len(self.indices)
 
     def __getitem__(self, idx):
         """
         Get a sample from the dataset.
+
         Inputs:
             idx : index of the sample
         Outputs: dict containing the following keys:
@@ -344,8 +395,8 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
             reached_goal_image : np.ndarray of shape (1, 3, 96, 96)
             reached_goal_agent_pos : np.ndarray of shape (1, 2)
             desired_goal_image : np.ndarray of shape (1, 3, 96, 96)
-            desired_goal_agent_pos : np.ndarray of shape (1, 2)"""
-
+            desired_goal_agent_pos : np.ndarray of shape (1, 2)
+        """
         # get the start/end indices for this datapoint
         buffer_start_idx, buffer_end_idx, sample_start_idx, sample_end_idx = (
             self.indices[idx]

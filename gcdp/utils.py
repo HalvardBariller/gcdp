@@ -1,19 +1,18 @@
+"""This module contains utility functions for the GCDP project."""
+
 import numpy as np
-import numba
-import matplotlib.pyplot as plt
 from copy import deepcopy
 import gymnasium as gym
 from gymnasium.wrappers import RecordVideo
-import gym_pusht
-import tqdm
 
 
 def record_video(env, name, horizon=180, policy=None):
     """
-    input
-    horizon : length of the simulation
-    policy : either a determinstic policy represented by an (H,S) array
-    or a random policy which is uniform (None)
+    Record a video of the environment for a given policy.
+
+    Parameters:
+        horizon : length of the simulation
+        policy : either a determinstic policy represented by an (H,S) array or a random policy which is uniform (None)
     """
     env = deepcopy(env)
     video_folder = "./gym_videos/" + name
@@ -36,14 +35,26 @@ def record_video(env, name, horizon=180, policy=None):
     if hasattr(env, "video_recorder") and env.video_recorder is not None:
         try:
             env.video_recorder.close()
-        except Exception as e:
-            print(f"Error closing video recorder: {e}")
+        except AttributeError as e:
+            print(f"Attribute error when closing video recorder: {e}")
+        except IOError as e:
+            print(f"IO error when closing video recorder: {e}")
+        # except Exception as e:
+        #     # Catch any other unexpected exceptions and re-raise
+        #     print(f"Unexpected error closing video recorder: {e}")
+        #     raise
 
     # Ensure environment is properly closed
     try:
         env.close()
-    except Exception as e:
-        print(f"Error closing environment: {e}")
+    except AttributeError as e:
+        print(f"Attribute error when closing environment: {e}")
+    except IOError as e:
+        print(f"IO error when closing environment: {e}")
+    # except Exception as e:
+    #     # Catch any other unexpected exceptions and re-raise
+    #     print(f"Unexpected error closing environment: {e}")
+    #     raise
 
     print("Environment closed successfully.")
 
@@ -51,7 +62,10 @@ def record_video(env, name, horizon=180, policy=None):
 
 
 class ScaleRewardWrapper(gym.RewardWrapper):
+    """This wrapper scales the reward to 1.0 for success and 0.0 otherwise."""
+
     def __init__(self, env):
+        """Initialize the wrapper."""
         super().__init__(env)
 
     def step(self, action):
@@ -64,15 +78,16 @@ class ScaleRewardWrapper(gym.RewardWrapper):
         return (next_state, reward, term, trunc, info)
 
 
-
 # normalize data
 def get_data_stats(data):
+    """Get the min and max values of the data."""
     data = data.reshape(-1, data.shape[-1])
     stats = {"min": np.min(data, axis=0), "max": np.max(data, axis=0)}
     return stats
 
 
 def normalize_data(data, stats):
+    """Normalize the data to [-1, 1]."""
     # Convert entries to np arrays
     if not isinstance(data, np.ndarray):
         data = np.array(data)
@@ -87,6 +102,7 @@ def normalize_data(data, stats):
 
 
 def unnormalize_data(ndata, stats):
+    """Unnormalize the data to the original range."""
     ndata = (ndata + 1) / 2
     data = ndata * (stats["max"] - stats["min"]) + stats["min"]
     return data

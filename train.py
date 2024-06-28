@@ -1,47 +1,46 @@
-import collections
+"""This script trains a diffusion model for the PushT task."""
+
 import gymnasium as gym
-import gym_pusht
-from gymnasium.wrappers import RecordVideo
-from IPython.display import Video, Image
-import matplotlib.pyplot as plt
-import numba
 import numpy as np
 import torch
 import torch.nn as nn
 import tqdm
 
-# from tqdm import tqdm
-from copy import deepcopy
 from diffusers import DDPMScheduler
 from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
+
 # from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from gcdp.episodes import (
     get_random_rollout,
     get_guided_rollout,
-    split_trajectory,
     PushTDatasetFromTrajectories,
 )
-from gcdp.utils import ScaleRewardWrapper, record_video
+from gcdp.utils import ScaleRewardWrapper
 from gcdp.diffusion import (
     get_resnet,
     replace_bn_with_gn,
     ConditionalUnet1D,
 )
 
-### Create the environment with sparse rewards
+# Create the environment with sparse rewards
 env = gym.make(
     "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
 )
 env = ScaleRewardWrapper(env)
 
-### Get statistics from demonstrations for normalization
+# Get statistics from demonstrations for normalization
 # demonstrations = LeRobotDataset("lerobot/pusht")
 # demonstrations_statistics = {
 #     k: demonstrations.stats[k] for k in ["action", "observation.state"]
 # }
-demonstration = np.load("objects/demonstration_statistics.npz", allow_pickle=True)
-demonstration_statistics = {key: demonstration[key].item() for key in demonstration}
+demonstration = np.load(
+    "objects/demonstration_statistics.npz",
+    allow_pickle=True,
+)
+demonstration_statistics = {
+    key: demonstration[key].item() for key in demonstration
+}
 demonstration.close()
 
 network_params = {
@@ -57,11 +56,11 @@ network_params = {
     "num_episodes": 10,
 }
 
-### Prediction parameters
+# Prediction parameters
 pred_horizon = network_params["pred_horizon"]
 obs_horizon = network_params["obs_horizon"]
 action_horizon = network_params["action_horizon"]
-### Training parameters
+# Training parameters
 policy_refinement = network_params["policy_refinement"]
 num_epochs = network_params["num_epochs"]
 batch_size = network_params["batch_size"]
@@ -70,7 +69,7 @@ episode_length = network_params["episode_length"]
 num_episodes = network_params["num_episodes"]
 
 
-### Networks definition
+# Networks definition
 # construct ResNet18 encoder
 vision_encoder = get_resnet("resnet18")
 # replace all BatchNorm with GroupNorm to work with EMA
@@ -165,7 +164,8 @@ for p in range(policy_refinement):
                 network_params=network_params,
                 normalization_stats=demonstration_statistics,
                 noise_scheduler=noise_scheduler,
-            ) for _ in range(num_episodes)
+            )
+            for _ in range(num_episodes)
         ]
         # update dataset
         dataset = PushTDatasetFromTrajectories(
@@ -188,13 +188,13 @@ for p in range(policy_refinement):
             persistent_workers=False,
         )
         print("Dataloading OK")
-    
+
     # training loop
     print(f"Policy Refinement {p}")
     with tqdm.tqdm(range(num_epochs), desc="Epoch") as tglobal:
         # epoch loop
-        for epoch_idx in tglobal:
-            epoch_loss = list()
+        for _ in tglobal:
+            epoch_loss = []
             # batch loop
             with tqdm.tqdm(dataloader, desc="Batch", leave=False) as tepoch:
                 for nbatch in tepoch:
@@ -218,17 +218,15 @@ for p in range(policy_refinement):
                     nreachedagent_pos = nreachedagent_pos.unsqueeze(
                         1
                     )  # (B, 1, 2) = (64, 1, 2)
-                    B = nagent_pos.shape[0]  # Batch = 64
-
-                    # encoder vision features
+                    B = nagent_pos.shape[0]
                     image_features = nets["vision_encoder"](
                         nimage.flatten(end_dim=1)
-                    )  # (B*obs_horizon, C, H, W) = (128, 3, 96, 96) --> (128, 512)
+                    )
+                    # (B*obs_horizon, C, H, W) = (128, 3, 96, 96) --> (128, 512)
                     image_features = image_features.reshape(
                         *nimage.shape[:2], -1
                     )  # (B, obs_horizon, D) = (64, 2, 512)
 
-                    # encoder vision goal
                     reached_image_features = nets["vision_encoder"](
                         nreachedimage
                     )  # (B, C, H, W) = (64, 3, 96, 96) --> (64, 512)
@@ -263,12 +261,17 @@ for p in range(policy_refinement):
 
                     # sample a diffusion iteration for each data point
                     timesteps = torch.randint(
-                        0, noise_scheduler.config.num_train_timesteps, (B,), device=device
+                        0,
+                        noise_scheduler.config.num_train_timesteps,
+                        (B,),
+                        device=device,
                     ).long()
 
-                    # add noise to the clean images according to the noise magnitude at each diffusion iteration
-                    # (this is the forward diffusion process)
-                    noisy_actions = noise_scheduler.add_noise(naction, noise, timesteps)
+                    # add noise to clean images according to noise magnitude
+                    # at each diffusion iteration (forward diffusion process)
+                    noisy_actions = noise_scheduler.add_noise(
+                        naction, noise, timesteps
+                    )
 
                     # predict the noise residual
                     noise_pred = noise_pred_net(

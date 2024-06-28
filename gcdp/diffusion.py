@@ -1,28 +1,39 @@
-# @markdown ### **Network**
-# @markdown
-# @markdown Defines a 1D UNet architecture `ConditionalUnet1D`
-# @markdown as the noies prediction network
-# @markdown
-# @markdown Components
-# @markdown - `SinusoidalPosEmb` Positional encoding for the diffusion iteration k
-# @markdown - `Downsample1d` Strided convolution to reduce temporal resolution
-# @markdown - `Upsample1d` Transposed convolution to increase temporal resolution
-# @markdown - `Conv1dBlock` Conv1d --> GroupNorm --> Mish
-# @markdown - `ConditionalResidualBlock1D` Takes two inputs `x` and `cond`. \
-# @markdown `x` is passed through 2 `Conv1dBlock` stacked together with residual connection.
-# @markdown `cond` is applied to `x` with [FiLM](https://arxiv.org/abs/1709.07871) conditioning.
+"""This module contains the implementation of the diffusion model and the vision encoder."""
+
+# The following code was directly taken from the work of Chi et al. (2021) and can be found on
+# the repository of the original project: https://github.com/real-stanford/diffusion_policy
+
+
+# ### **Network**
+# Defines a 1D UNet architecture `ConditionalUnet1D`
+# as the noies prediction network
+# Components
+# - `SinusoidalPosEmb` Positional encoding for the diffusion iteration k
+# - `Downsample1d` Strided convolution to reduce temporal resolution
+# - `Upsample1d` Transposed convolution to increase temporal resolution
+# - `Conv1dBlock` Conv1d --> GroupNorm --> Mish
+# - `ConditionalResidualBlock1D` Takes two inputs `x` and `cond`. \
+# `x` is passed through 2 `Conv1dBlock` stacked together with residual connection.
+# `cond` is applied to `x` with [FiLM](https://arxiv.org/abs/1709.07871) conditioning.
 
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torchvision
 import math
 from typing import Union, Callable
 
 
 class SinusoidalPosEmb(nn.Module):
+    """Sinusoidal positional encoding for 1D data."""
+
     def __init__(self, dim):
+        """
+        Initialize the positional encoding.
+
+        Inputs:
+        - dim: the dimension of the positional encoding
+        """
         super().__init__()
         self.dim = dim
 
@@ -37,7 +48,15 @@ class SinusoidalPosEmb(nn.Module):
 
 
 class Downsample1d(nn.Module):
+    """Downsample 1D data by strided convolution."""
+
     def __init__(self, dim):
+        """
+        Initialize the downsample layer.
+
+        Inputs:
+        - dim: the dimension of the input data
+        """
         super().__init__()
         self.conv = nn.Conv1d(dim, dim, 3, 2, 1)
 
@@ -46,7 +65,15 @@ class Downsample1d(nn.Module):
 
 
 class Upsample1d(nn.Module):
+    """Upsample 1D data by transposed convolution."""
+
     def __init__(self, dim):
+        """
+        Initialize the upsample layer.
+
+        Inputs:
+        - dim: the dimension of the input data
+        """
         super().__init__()
         self.conv = nn.ConvTranspose1d(dim, dim, 4, 2, 1)
 
@@ -55,16 +82,25 @@ class Upsample1d(nn.Module):
 
 
 class Conv1dBlock(nn.Module):
-    """
-    Conv1d --> GroupNorm --> Mish
-    """
+    """Conv1d block with GroupNorm and Mish activation."""
 
     def __init__(self, inp_channels, out_channels, kernel_size, n_groups=8):
-        super().__init__()
+        """
+        Initialize the Conv1d block.
 
+        Inputs:
+        - inp_channels: the number of input channels
+        - out_channels: the number of output channels
+        - kernel_size: the size of the convolutional kernel
+        - n_groups: the number of groups for GroupNorm
+        """
+        super().__init__()
         self.block = nn.Sequential(
             nn.Conv1d(
-                inp_channels, out_channels, kernel_size, padding=kernel_size // 2
+                inp_channels,
+                out_channels,
+                kernel_size,
+                padding=kernel_size // 2,
             ),
             nn.GroupNorm(n_groups, out_channels),
             nn.Mish(),
@@ -75,13 +111,31 @@ class Conv1dBlock(nn.Module):
 
 
 class ConditionalResidualBlock1D(nn.Module):
-    def __init__(self, in_channels, out_channels, cond_dim, kernel_size=3, n_groups=8):
+    """Conditional residual block for 1D data."""
+
+    def __init__(
+        self, in_channels, out_channels, cond_dim, kernel_size=3, n_groups=8
+    ):
+        """
+        Initialize the conditional residual block.
+
+        Inputs:
+        - in_channels: the number of input channels
+        - out_channels: the number of output channels
+        - cond_dim: the dimension of the conditioning input
+        - kernel_size: the size of the convolutional kernel
+        - n_groups: the number of groups for GroupNorm
+        """
         super().__init__()
 
         self.blocks = nn.ModuleList(
             [
-                Conv1dBlock(in_channels, out_channels, kernel_size, n_groups=n_groups),
-                Conv1dBlock(out_channels, out_channels, kernel_size, n_groups=n_groups),
+                Conv1dBlock(
+                    in_channels, out_channels, kernel_size, n_groups=n_groups
+                ),
+                Conv1dBlock(
+                    out_channels, out_channels, kernel_size, n_groups=n_groups
+                ),
             ]
         )
 
@@ -90,7 +144,9 @@ class ConditionalResidualBlock1D(nn.Module):
         cond_channels = out_channels * 2
         self.out_channels = out_channels
         self.cond_encoder = nn.Sequential(
-            nn.Mish(), nn.Linear(cond_dim, cond_channels), nn.Unflatten(-1, (-1, 1))
+            nn.Mish(),
+            nn.Linear(cond_dim, cond_channels),
+            nn.Unflatten(-1, (-1, 1)),
         )
 
         # make sure dimensions compatible
@@ -102,11 +158,13 @@ class ConditionalResidualBlock1D(nn.Module):
 
     def forward(self, x, cond):
         """
-        x : [ batch_size x in_channels x horizon ]
-        cond : [ batch_size x cond_dim]
+        Forward pass of the conditional residual block.
 
-        returns:
-        out : [ batch_size x out_channels x horizon ]
+        Inputs:
+            x : [ batch_size x in_channels x horizon ]
+            cond : [ batch_size x cond_dim]
+        Outputs:
+            out : [ batch_size x out_channels x horizon ]
         """
         out = self.blocks[0](x)
         embed = self.cond_encoder(cond)
@@ -122,27 +180,30 @@ class ConditionalResidualBlock1D(nn.Module):
 
 
 class ConditionalUnet1D(nn.Module):
+    """Conditional UNet for 1D data."""
+
     def __init__(
         self,
         input_dim,
         global_cond_dim,
         diffusion_step_embed_dim=256,
-        down_dims=[256, 512, 1024],
+        down_dims=None,
         kernel_size=5,
         n_groups=8,
     ):
         """
-        input_dim: Dim of actions.
-        global_cond_dim: Dim of global conditioning applied with FiLM
-          in addition to diffusion step embedding. This is usually obs_horizon * obs_dim
-        diffusion_step_embed_dim: Size of positional encoding for diffusion iteration k
-        down_dims: Channel size for each UNet level.
-          The length of this array determines numebr of levels.
-        kernel_size: Conv kernel size
-        n_groups: Number of groups for GroupNorm
-        """
+        Initialize the Conditional UNet.
 
+        Parameters:
+            input_dim: Dim of actions.
+            global_cond_dim: Dim of global conditioning applied with FiLM in addition to diffusion step embedding. This is usually obs_horizon * obs_dim diffusion_step_embed_dim: Size of positional encoding for diffusion iteration k
+            down_dims: Channel size for each UNet level. The length of this array determines number of levels.
+            kernel_size: Conv kernel size
+            n_groups: Number of groups for GroupNorm
+        """
         super().__init__()
+        if down_dims is None:
+            down_dims = [256, 512, 1024]
         all_dims = [input_dim] + list(down_dims)
         start_dim = down_dims[0]
 
@@ -196,7 +257,11 @@ class ConditionalUnet1D(nn.Module):
                             kernel_size=kernel_size,
                             n_groups=n_groups,
                         ),
-                        Downsample1d(dim_out) if not is_last else nn.Identity(),
+                        (
+                            Downsample1d(dim_out)
+                            if not is_last
+                            else nn.Identity()
+                        ),
                     ]
                 )
             )
@@ -249,10 +314,14 @@ class ConditionalUnet1D(nn.Module):
         global_cond=None,
     ):
         """
-        x: (B,T,input_dim)
-        timestep: (B,) or int, diffusion step
-        global_cond: (B,global_cond_dim)
-        output: (B,T,input_dim)
+        Forward pass of the Conditional UNet.
+
+        Parameters:
+            x: (B,T,input_dim)
+            timestep: (B,) or int, diffusion step
+            global_cond: (B,global_cond_dim)
+        Returns:
+            output: (B,T,input_dim)
         """
         # (B,T,C)
         sample = sample.moveaxis(-1, -2)
@@ -277,7 +346,7 @@ class ConditionalUnet1D(nn.Module):
 
         x = sample
         h = []
-        for idx, (resnet, resnet2, downsample) in enumerate(self.down_modules):
+        for _, (resnet, resnet2, downsample) in enumerate(self.down_modules):
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
             h.append(x)
@@ -286,7 +355,7 @@ class ConditionalUnet1D(nn.Module):
         for mid_module in self.mid_modules:
             x = mid_module(x, global_feature)
 
-        for idx, (resnet, resnet2, upsample) in enumerate(self.up_modules):
+        for _, (resnet, resnet2, upsample) in enumerate(self.up_modules):
             x = torch.cat((x, h.pop()), dim=1)
             x = resnet(x, global_feature)
             x = resnet2(x, global_feature)
@@ -300,17 +369,20 @@ class ConditionalUnet1D(nn.Module):
         return x
 
 
-# @markdown ### **Vision Encoder**
+# ### **Vision Encoder**
 # @markdown
-# @markdown Defines helper functions:
-# @markdown - `get_resnet` to initialize standard ResNet vision encoder
-# @markdown - `replace_bn_with_gn` to replace all BatchNorm layers with GroupNorm
+# Defines helper functions:
+# - `get_resnet` to initialize standard ResNet vision encoder
+# - `replace_bn_with_gn` to replace all BatchNorm layers with GroupNorm
 
 
 def get_resnet(name: str, weights=None, **kwargs) -> nn.Module:
     """
-    name: resnet18, resnet34, resnet50
-    weights: "IMAGENET1K_V1", None
+    Initialize standard ResNet vision encoder.
+
+    Parameters:
+        name: resnet18, resnet34, resnet50
+        weights: "IMAGENET1K_V1", None
     """
     # Use standard ResNet implementation from torchvision
     func = getattr(torchvision.models, name)
@@ -328,11 +400,12 @@ def replace_submodules(
     func: Callable[[nn.Module], nn.Module],
 ) -> nn.Module:
     """
-    Replace all submodules selected by the predicate with
-    the output of func.
+    Replace all submodules selected by the predicate with the output of func.
 
-    predicate: Return true if the module is to be replaced.
-    func: Return new module to use.
+    Parameters:
+        root_module: The module to search for submodules.
+        predicate: Return true if the module is to be replaced.
+        func: Return new module to use.
     """
     if predicate(root_module):
         return func(root_module)
@@ -368,14 +441,13 @@ def replace_submodules(
 def replace_bn_with_gn(
     root_module: nn.Module, features_per_group: int = 16
 ) -> nn.Module:
-    """
-    Relace all BatchNorm layers with GroupNorm.
-    """
+    """Replace all BatchNorm layers with GroupNorm."""
     replace_submodules(
         root_module=root_module,
         predicate=lambda x: isinstance(x, nn.BatchNorm2d),
         func=lambda x: nn.GroupNorm(
-            num_groups=x.num_features // features_per_group, num_channels=x.num_features
+            num_groups=x.num_features // features_per_group,
+            num_channels=x.num_features,
         ),
     )
     return root_module
