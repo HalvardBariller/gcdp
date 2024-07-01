@@ -1,7 +1,13 @@
 """This script trains a diffusion model for the PushT task."""
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message="torch.utils._pytree._register_pytree_node is deprecated")
+warnings.filterwarnings("ignore", category=FutureWarning, message="transformers.deepspeed module is deprecated and will be removed in a future version")
+
 import collections
 import gymnasium as gym
+import gym_pusht
+import logging
 import numpy as np
 import pickle
 import random
@@ -14,17 +20,18 @@ from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 
 # from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from gcdp.episodes import (
-    get_random_rollout,
-    get_guided_rollout,
-    PushTDatasetFromTrajectories,
-)
-from gcdp.utils import ScaleRewardWrapper
 from gcdp.diffusion import (
     get_resnet,
     replace_bn_with_gn,
     ConditionalUnet1D,
 )
+from gcdp.episodes import (
+    get_random_rollout,
+    get_guided_rollout,
+    PushTDatasetFromTrajectories,
+)
+from gcdp.logging import init_logging
+from gcdp.utils import ScaleRewardWrapper, set_global_seed
 
 # Create the environment with sparse rewards
 env = gym.make(
@@ -64,6 +71,11 @@ network_params = {
     "episode_length": 50,
     "num_episodes": 10,
 }
+
+# Set seed for reproducibility
+set_global_seed(42)
+# Configure logging
+init_logging()
 
 # Prediction parameters
 pred_horizon = network_params["pred_horizon"]
@@ -129,7 +141,7 @@ optimizer = torch.optim.AdamW(
     betas=(0.95, 0.999),
 )
 
-
+logging.info("Training Diffusion Model.")
 for p in range(policy_refinement):
     if p == 0:
         trajectories = [
@@ -164,6 +176,7 @@ for p in range(policy_refinement):
             num_training_steps=len(dataloader) * num_epochs,
         )
     else:
+        logging.info("Generating new trajectories...")
         trajectories = [
             get_guided_rollout(
                 episode_length=episode_length,
@@ -198,15 +211,16 @@ for p in range(policy_refinement):
         )
         print("Dataloading OK")
 
-    # training loop
-    print(f"Policy Refinement {p}")
     with tqdm.tqdm(range(num_epochs), desc="Epoch") as tglobal:
         # epoch loop
-        for _ in tglobal:
+        for nepoch in tglobal:
+            logging.info("EPOCH: %d", nepoch+1)
             epoch_loss = []
             # batch loop
+            step = 0
             with tqdm.tqdm(dataloader, desc="Batch", leave=False) as tepoch:
                 for nbatch in tepoch:
+                    step += 1
                     # data normalized in dataset
                     # device transfer
                     nimage = nbatch["image"][:, :obs_horizon].to(
@@ -291,7 +305,16 @@ for p in range(policy_refinement):
                     loss = nn.functional.mse_loss(noise_pred, noise)
 
                     # Log the loss
-                    # print(loss)
+                    log_items = [
+                        f"Policy Refinement: {p+1}",
+                        f"Epoch: {nepoch+1}",
+                        f"Step: {step}",
+                        f"Loss: {loss.item():.3f}",
+                        # f"Learning Rate: {lr_scheduler.get_last_lr():.3f}",
+                        f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}"
+                    ]
+                    if step % 10 == 0:
+                        logging.info(" | ".join(log_items))
 
                     # optimize
                     loss.backward()
@@ -309,6 +332,14 @@ for p in range(policy_refinement):
                     epoch_loss.append(loss_cpu)
                     tepoch.set_postfix(loss=loss_cpu)
             tglobal.set_postfix(loss=np.mean(epoch_loss))
+            # Log epoch loss
+            log_epoch = [
+                f"Policy Refinement: {p+1}",
+                f"Epoch: {nepoch+1}",
+                f"Epoch Loss: {np.mean(epoch_loss):.3f}",
+                f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}",
+            ]
+            logging.info(" | ".join(log_epoch))
 
     # Weights of the EMA model
     # is used for inference

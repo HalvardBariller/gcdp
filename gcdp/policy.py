@@ -16,9 +16,10 @@ def diff_policy(
     device: torch.device,
     network_params: dict,
     normalization_stats: dict,
+    actions_taken: int = 1, 
 ):
     """
-    Predict the action to take to reach the goal considering past observations.
+    Predict a sequence of actions to take to reach the goal considering past observations.
 
     Inputs:
     - model: the model used to predict the action (vision and noise models)
@@ -28,8 +29,9 @@ def diff_policy(
     - device: the device to use
     - network_params: the parameters of the network
     - normalization_stats: the statistics used to normalize the data
+    - actions_taken: the number of actions to execute
     Outputs:
-    - action: the action to take
+    - actions: sequence of actions to execute
     """
     # Unpack network parameters
     obs_horizon = network_params["obs_horizon"]
@@ -115,5 +117,8 @@ def diff_policy(
         stats=normalization_stats["action"],
     )
     start = obs_horizon - 1
+    end = start + actions_taken
 
-    return action_pred[start, :]
+    actions = action_pred[start:end, :] # (actions_taken, action_dim)
+
+    return actions

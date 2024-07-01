@@ -1,8 +1,11 @@
 """This module contains utility functions for the GCDP project."""
 
-import numpy as np
-from copy import deepcopy
 import gymnasium as gym
+import numpy as np
+import random
+import torch
+
+from copy import deepcopy
 from gymnasium.wrappers import RecordVideo
 
 
@@ -106,3 +109,12 @@ def unnormalize_data(ndata, stats):
     ndata = (ndata + 1) / 2
     data = ndata * (stats["max"] - stats["min"]) + stats["min"]
     return data
+
+
+def set_global_seed(seed):
+    """Set seed for reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
