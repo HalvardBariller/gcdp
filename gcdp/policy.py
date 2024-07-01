@@ -12,7 +12,7 @@ def diff_policy(
     model: torch.ModuleDict,
     noise_scheduler: DDPMScheduler,
     observations: collections.deque,
-    goal: np.ndarray,
+    goal: dict,
     device: torch.device,
     network_params: dict,
     normalization_stats: dict,
