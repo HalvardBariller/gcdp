@@ -1,7 +1,10 @@
 """This script trains a diffusion model for the PushT task."""
 
+import collections
 import gymnasium as gym
 import numpy as np
+import pickle
+import random
 import torch
 import torch.nn as nn
 import tqdm
@@ -42,6 +45,12 @@ demonstration_statistics = {
     key: demonstration[key].item() for key in demonstration
 }
 demonstration.close()
+# Load target goals
+with open("objects/successes.pkl", "rb") as f:
+    successes = pickle.load(f)
+for item in successes:
+    item["pixels"] = item["pixels"].astype(np.float64)
+
 
 network_params = {
     "obs_horizon": 2,
@@ -305,6 +314,24 @@ for p in range(policy_refinement):
     # is used for inference
     ema_nets = nets
     ema.copy_to(ema_nets.parameters())
+
+    # Evaluate the model
+    max_steps = 200
+    env = gym.make(
+        "gym_pusht/PushT-v0",
+        obs_type="pixels_agent_pos",
+        render_mode="rgb_array",
+    )
+    env = ScaleRewardWrapper(env)
+    # get first observation
+    obs, info = env.reset()
+    # keep a queue of last 2 steps of observations
+    obs_deque = collections.deque([obs] * obs_horizon, maxlen=obs_horizon)
+    # save visualization and rewards
+
+
+# Save the model
+torch.save(ema_nets, "objects/pusht_model.pth")
 
 
 ###############################################
