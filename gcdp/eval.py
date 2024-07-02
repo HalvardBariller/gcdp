@@ -1,3 +1,5 @@
+"""This script contains the function to evaluate a policy in a Gym environment."""
+
 import collections
 import gym
 import numpy as np
@@ -7,6 +9,7 @@ from gcdp.policy import diff_policy
 from copy import deepcopy
 from gymnasium.wrappers import RecordVideo
 from pathlib import Path
+
 
 def eval_policy(
     env: gym.Env,
@@ -36,7 +39,7 @@ def eval_policy(
         network_params (dict): Parameters specific to the neural network model.
         normalization_stats: Statistics for normalizing input data.
         successes (list): List of successful outcomes to choose goals from.
-    
+
     Returns:
         dict: A dictionary containing the success rate, average rewards, and details of the last goal.
     """
@@ -46,7 +49,7 @@ def eval_policy(
     device = kwargs["device"]
     network_params = kwargs["network_params"]
     normalization_stats = kwargs["normalization_stats"]
-    
+
     successes = kwargs["successes"]
     len_successes = len(successes)
 
@@ -60,7 +63,9 @@ def eval_policy(
 
     for episode in tqdm.tqdm(range(num_episodes)):
         if save_video and episode == num_episodes - 1:
-            env = RecordVideo(env, video_path, disable_logger=True, name_prefix=video_prefix)
+            env = RecordVideo(
+                env, video_path, disable_logger=True, name_prefix=video_prefix
+            )
         seed += 1
         # Keep track of the planned actions
         action_queue = collections.deque(maxlen=actions_taken)
@@ -97,18 +102,20 @@ def eval_policy(
                 done = True
         episode_results["success"].append(done)
         episode_results["rewards"].append(tot_reward)
-    
+
     env.close()
-    
-    episode_results["success_rate"] = sum(episode_results["success"]) / num_episodes
-    episode_results["average_reward"] = sum(episode_results["rewards"]) / num_episodes
+
+    episode_results["success_rate"] = (
+        sum(episode_results["success"]) / num_episodes
+    )
+    episode_results["average_reward"] = (
+        sum(episode_results["rewards"]) / num_episodes
+    )
     episode_results["last goal"] = goal["pixels"]
 
     video_files = list(Path("video").rglob("*.mp4"))
     print("video files", video_files)
     if video_files:
         episode_results["rollout_video"] = video_files[0]
-    
-    return episode_results
 
-                
+    return episode_results

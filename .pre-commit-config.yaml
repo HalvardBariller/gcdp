@@ -30,7 +30,7 @@ repos:
       - id: flake8
         args:
           - --config=pyproject.toml
-          - --ignore=E203,E266,E501,W503,F403,F401,B905, D102
+          - --ignore=E203,E266,E501,W503,F403,F401,B905,D102,E402
         additional_dependencies:
           [
             "flake8-blind-except",

@@ -1,8 +1,17 @@
 """This script trains a diffusion model for the PushT task."""
 
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning, message="torch.utils._pytree._register_pytree_node is deprecated")
-warnings.filterwarnings("ignore", category=FutureWarning, message="transformers.deepspeed module is deprecated and will be removed in a future version")
+
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message="torch.utils._pytree._register_pytree_node is deprecated",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message="transformers.deepspeed module is deprecated and will be removed in a future version",
+)
 
 import collections
 import gymnasium as gym
@@ -20,7 +29,6 @@ from diffusers import DDPMScheduler
 from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 
-# from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from gcdp.diffusion import (
     get_resnet,
     replace_bn_with_gn,
@@ -42,10 +50,6 @@ env = gym.make(
 env = ScaleRewardWrapper(env)
 
 # Get statistics from demonstrations for normalization
-# demonstrations = LeRobotDataset("lerobot/pusht")
-# demonstrations_statistics = {
-#     k: demonstrations.stats[k] for k in ["action", "observation.state"]
-# }
 demonstration = np.load(
     "objects/demonstration_statistics.npz",
     allow_pickle=True,
@@ -72,7 +76,7 @@ network_params = {
     "num_epochs": 10,
     "episode_length": 50,
     "num_episodes": 50,
-    "seed": 42
+    "seed": 42,
 }
 eval = True
 
@@ -123,6 +127,7 @@ noise_pred_net = ConditionalUnet1D(
 nets = nn.ModuleDict(
     {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
 )
+ema_nets = nets
 # for this demo, we use DDPMScheduler with 100 diffusion iterations
 num_diffusion_iters = network_params["num_diffusion_iters"]
 noise_scheduler = DDPMScheduler(
@@ -191,7 +196,9 @@ for p in range(policy_refinement):
             name="cosine",
             optimizer=optimizer,
             num_warmup_steps=500,
-            num_training_steps=len(dataloader) * num_epochs * policy_refinement,
+            num_training_steps=len(dataloader)
+            * num_epochs
+            * policy_refinement,
         )
     else:
         logging.info("Generating new trajectories...")
@@ -232,7 +239,7 @@ for p in range(policy_refinement):
     with tqdm.tqdm(range(num_epochs), desc="Epoch") as tglobal:
         # epoch loop
         for nepoch in tglobal:
-            logging.info("EPOCH: %d", nepoch+1)
+            logging.info("EPOCH: %d", nepoch + 1)
             epoch_loss = []
             # batch loop
             step = 0
@@ -329,15 +336,18 @@ for p in range(policy_refinement):
                         f"Step: {step}",
                         f"Loss: {loss.item():.3f}",
                         # f"Learning Rate: {lr_scheduler.get_last_lr():.3f}",
-                        f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}"
+                        f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}",
                     ]
-                    wandb.log({
-                        "train/loss": loss.item(),
-                        "train/learning_rate": optimizer.param_groups[0]["lr"],
-                        "train/epoch": nepoch,
-                        "train/policy_refinement": p+1,
-                        "train/steps": step,
-                    },
+                    wandb.log(
+                        {
+                            "train/loss": loss.item(),
+                            "train/learning_rate": optimizer.param_groups[0][
+                                "lr"
+                            ],
+                            "train/epoch": nepoch,
+                            "train/policy_refinement": p + 1,
+                            "train/steps": step,
+                        },
                     )
 
                     if step % 10 == 0:
@@ -377,7 +387,9 @@ for p in range(policy_refinement):
         # Evaluate the model
         logging.info("Evaluating the model.")
         env = gym.make(
-            "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
         )
         env = ScaleRewardWrapper(env)
 
@@ -387,7 +399,7 @@ for p in range(policy_refinement):
             max_steps=200,
             save_video=True,
             video_path="video/pusht",
-            video_prefix="pusht_policy_refinement_"+str(p),
+            video_prefix="pusht_policy_refinement_" + str(p),
             seed=network_params["seed"] + 1,
             model=ema_nets,
             noise_scheduler=noise_scheduler,
@@ -398,18 +410,27 @@ for p in range(policy_refinement):
             successes=successes,
         )
         last_goal = wandb.Image(eval_results["last goal"], caption="Last Goal")
-        wandb.log({
-            "eval/success_rate": eval_results["success_rate"],
-            "eval/average_reward": eval_results["average_reward"],
-            "eval/sum_rewards": sum(eval_results["rewards"]),
-            "eval/policy_refinement": p+1,
-            "eval/goal_conditioning": last_goal,
-        },
+        wandb.log(
+            {
+                "eval/success_rate": eval_results["success_rate"],
+                "eval/average_reward": eval_results["average_reward"],
+                "eval/sum_rewards": sum(eval_results["rewards"]),
+                "eval/policy_refinement": p + 1,
+                "eval/goal_conditioning": last_goal,
+            },
         )
         if "rollout_video" in eval_results:
-            print("Type of rollout_video:", type(eval_results["rollout_video"]))
+            print(
+                "Type of rollout_video:", type(eval_results["rollout_video"])
+            )
             print("Content of rollout_video:", eval_results["rollout_video"])
-            wandb.log({"eval/rollout_video": wandb.Video(str(eval_results["rollout_video"]), fps=4)})
+            wandb.log(
+                {
+                    "eval/rollout_video": wandb.Video(
+                        str(eval_results["rollout_video"]), fps=4
+                    )
+                }
+            )
 
 # Save the model
 # torch.save(ema_nets, "objects/pusht_model_"+str(p)+".pt")
