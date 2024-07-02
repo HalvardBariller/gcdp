@@ -71,6 +71,7 @@ network_params = {
     "action_horizon": 8,
     "action_dim": 2,
     "num_diffusion_iters": 10,
+    "num_diffusion_iters_train": 50,
     "batch_size": 128,
     "policy_refinement": 10,
     "num_epochs": 10,
@@ -84,8 +85,6 @@ eval = True
 set_global_seed(network_params["seed"])
 # Configure logging
 init_logging()
-# Log the network parameters
-logging.info("Network Parameters: %s", network_params)
 # Initialize wandb
 wandb.init(
     project="GCDP",
@@ -128,8 +127,8 @@ nets = nn.ModuleDict(
     {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
 )
 ema_nets = nets
-# for this demo, we use DDPMScheduler with 100 diffusion iterations
-num_diffusion_iters = network_params["num_diffusion_iters"]
+# for this demo, we use DDPMScheduler with 50 diffusion iterations
+num_diffusion_iters = network_params["num_diffusion_iters_train"]
 noise_scheduler = DDPMScheduler(
     num_train_timesteps=num_diffusion_iters,
     # the choise of beta schedule has big impact on performance
@@ -200,6 +199,9 @@ for p in range(policy_refinement):
             * num_epochs
             * policy_refinement,
         )
+        # Log the network parameters
+        logging.info("Network Parameters: %s", network_params)
+        logging.info("Dataset contains %d samples.", len(dataset))
     else:
         logging.info("Generating new trajectories...")
         trajectories = [
@@ -234,12 +236,11 @@ for p in range(policy_refinement):
             # don't kill worker process afte each epoch
             persistent_workers=False,
         )
-        print("Dataloading OK")
 
     with tqdm.tqdm(range(num_epochs), desc="Epoch") as tglobal:
         # epoch loop
         for nepoch in tglobal:
-            logging.info("EPOCH: %d", nepoch + 1)
+            logging.info("EPOCH: %d  ", nepoch + 1)
             epoch_loss = []
             # batch loop
             step = 0

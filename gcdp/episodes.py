@@ -92,7 +92,6 @@ def get_guided_rollout(
             render_mode="rgb_array",
         )
         env = ScaleRewardWrapper(env)
-    # desired_goal = env.observation_space.sample() # Random samp. had no meaning
     desired_goal, _ = env.reset()  # Reset is random
     s, _ = env.reset()
     states = []

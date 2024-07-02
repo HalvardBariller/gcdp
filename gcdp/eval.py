@@ -67,6 +67,7 @@ def eval_policy(
                 env, video_path, disable_logger=True, name_prefix=video_prefix
             )
         seed += 1
+        task_completed = False
         # Keep track of the planned actions
         action_queue = collections.deque(maxlen=actions_taken)
         # Randomly select a goal among the successful ones
@@ -83,6 +84,8 @@ def eval_policy(
                 s, r, done, _, _ = env.step(action_queue.popleft())
                 tot_reward += r
                 step += 1
+                if done:
+                    task_completed = True
             # Plan new actions
             else:
                 action_chunk = diff_policy(
@@ -100,7 +103,7 @@ def eval_policy(
             observations.append(s)
             if step > max_steps:
                 done = True
-        episode_results["success"].append(done)
+        episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
 
     env.close()

@@ -1,5 +1,6 @@
 gym_videos/
 .mypy_cache/
 .vscode/
-video
+video/
 **/__pycache__
+wandb/
