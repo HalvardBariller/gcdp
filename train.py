@@ -14,6 +14,7 @@ import random
 import torch
 import torch.nn as nn
 import tqdm
+import wandb
 
 from diffusers import DDPMScheduler
 from diffusers.training_utils import EMAModel
@@ -30,6 +31,7 @@ from gcdp.episodes import (
     get_guided_rollout,
     PushTDatasetFromTrajectories,
 )
+from gcdp.eval import eval_policy
 from gcdp.logging import init_logging
 from gcdp.utils import ScaleRewardWrapper, set_global_seed
 
@@ -64,18 +66,27 @@ network_params = {
     "pred_horizon": 16,
     "action_horizon": 8,
     "action_dim": 2,
-    "num_diffusion_iters": 100,
-    "batch_size": 64,
-    "policy_refinement": 2,
-    "num_epochs": 1,
+    "num_diffusion_iters": 10,
+    "batch_size": 128,
+    "policy_refinement": 10,
+    "num_epochs": 10,
     "episode_length": 50,
-    "num_episodes": 10,
+    "num_episodes": 50,
+    "seed": 42
 }
+eval = True
 
 # Set seed for reproducibility
-set_global_seed(42)
+set_global_seed(network_params["seed"])
 # Configure logging
 init_logging()
+# Log the network parameters
+logging.info("Network Parameters: %s", network_params)
+# Initialize wandb
+wandb.init(
+    project="GCDP",
+    config=network_params,
+)
 
 # Prediction parameters
 pred_horizon = network_params["pred_horizon"]
@@ -133,13 +144,13 @@ _ = nets.to(device)
 ema = EMAModel(parameters=nets.parameters(), power=0.75)
 # Standard ADAM optimizer
 # Note that EMA parametesr are not optimized
-optimizer = torch.optim.AdamW(
-    params=nets.parameters(),
-    lr=1e-4,
-    weight_decay=1e-6,
-    eps=1e-8,
-    betas=(0.95, 0.999),
-)
+# optimizer = torch.optim.AdamW(
+#     params=nets.parameters(),
+#     lr=1e-4,
+#     weight_decay=1e-6,
+#     eps=1e-8,
+#     betas=(0.95, 0.999),
+# )
 
 logging.info("Training Diffusion Model.")
 for p in range(policy_refinement):
@@ -168,12 +179,19 @@ for p in range(policy_refinement):
             # don't kill worker process afte each epoch
             persistent_workers=False,
         )
+        optimizer = torch.optim.AdamW(
+            params=nets.parameters(),
+            lr=1e-4,
+            weight_decay=1e-6,
+            eps=1e-8,
+            betas=(0.95, 0.999),
+        )
         # Cosine LR schedule with linear warmup
         lr_scheduler = get_scheduler(
             name="cosine",
             optimizer=optimizer,
             num_warmup_steps=500,
-            num_training_steps=len(dataloader) * num_epochs,
+            num_training_steps=len(dataloader) * num_epochs * policy_refinement,
         )
     else:
         logging.info("Generating new trajectories...")
@@ -181,7 +199,7 @@ for p in range(policy_refinement):
             get_guided_rollout(
                 episode_length=episode_length,
                 env=env,
-                model=nets,
+                model=ema_nets,
                 device=device,
                 network_params=network_params,
                 normalization_stats=demonstration_statistics,
@@ -313,6 +331,15 @@ for p in range(policy_refinement):
                         # f"Learning Rate: {lr_scheduler.get_last_lr():.3f}",
                         f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}"
                     ]
+                    wandb.log({
+                        "train/loss": loss.item(),
+                        "train/learning_rate": optimizer.param_groups[0]["lr"],
+                        "train/epoch": nepoch,
+                        "train/policy_refinement": p+1,
+                        "train/steps": step,
+                    },
+                    )
+
                     if step % 10 == 0:
                         logging.info(" | ".join(log_items))
 
@@ -346,21 +373,43 @@ for p in range(policy_refinement):
     ema_nets = nets
     ema.copy_to(ema_nets.parameters())
 
-    # Evaluate the model
-    max_steps = 200
-    env = gym.make(
-        "gym_pusht/PushT-v0",
-        obs_type="pixels_agent_pos",
-        render_mode="rgb_array",
-    )
-    env = ScaleRewardWrapper(env)
-    # get first observation
-    obs, info = env.reset()
-    # keep a queue of last 2 steps of observations
-    obs_deque = collections.deque([obs] * obs_horizon, maxlen=obs_horizon)
-    # save visualization and rewards
+    if eval:
+        # Evaluate the model
+        logging.info("Evaluating the model.")
+        env = gym.make(
+            "gym_pusht/PushT-v0", obs_type="pixels_agent_pos", render_mode="rgb_array"
+        )
+        env = ScaleRewardWrapper(env)
 
+        eval_results = eval_policy(
+            env=env,
+            num_episodes=10,
+            max_steps=200,
+            save_video=True,
+            video_path="video/pusht",
+            video_prefix="pusht_policy_refinement_"+str(p),
+            seed=network_params["seed"] + 1,
+            model=ema_nets,
+            noise_scheduler=noise_scheduler,
+            observations=obs_horizon,
+            device=device,
+            network_params=network_params,
+            normalization_stats=demonstration_statistics,
+            successes=successes,
+        )
+        last_goal = wandb.Image(eval_results["last goal"], caption="Last Goal")
+        wandb.log({
+            "eval/success_rate": eval_results["success_rate"],
+            "eval/average_reward": eval_results["average_reward"],
+            "eval/sum_rewards": sum(eval_results["rewards"]),
+            "eval/policy_refinement": p+1,
+            "eval/goal_conditioning": last_goal,
+        },
+        )
+        if "rollout_video" in eval_results:
+            print("Type of rollout_video:", type(eval_results["rollout_video"]))
+            print("Content of rollout_video:", eval_results["rollout_video"])
+            wandb.log({"eval/rollout_video": wandb.Video(str(eval_results["rollout_video"]), fps=4)})
 
 # Save the model
-torch.save(ema_nets, "objects/pusht_model.pth")
-
+# torch.save(ema_nets, "objects/pusht_model_"+str(p)+".pt")

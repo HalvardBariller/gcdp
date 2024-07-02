@@ -112,6 +112,8 @@ def get_guided_rollout(
             network_params=network_params,
             normalization_stats=normalization_stats,
         )
+        if action.shape != (2,):
+            action = action[0]
         states.append(s)
         observations.append(s)
         actions.append(action)

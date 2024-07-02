@@ -212,3 +212,15 @@ def init_logging():
     #     wandb_video = self._wandb.Video(video_path, fps=self._cfg.fps, format="mp4")
     #     self._wandb.log({f"{mode}/video": wandb_video}, step=step)
 
+
+
+# class Logger:
+#     """Primary logger object. Logs either locally or using wandb."""
+
+#     def __init__(self, cfg, log_dir, wandb_job_name=None):
+
+
+
+#     def log_train_wandb(cfg, step, **kwargs):
+#         """Log training metrics to WandB."""
+        

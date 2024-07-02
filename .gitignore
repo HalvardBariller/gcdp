@@ -1,3 +1,5 @@
 gym_videos/
 .mypy_cache/
 .vscode/
+video
+**/__pycache__
