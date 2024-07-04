@@ -261,7 +261,17 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         get_original_goal: bool,
         dataset_statistics: dict,
     ):
-        """Initialize the dataset."""
+        """
+        Initialize the dataset.
+
+        Parameters:
+            trajectories : list of dicts containing the states, actions, reached goals and desired goal
+            pred_horizon : length of the prediction horizon
+            obs_horizon : length of the observation horizon
+            action_horizon : length of the action horizon
+            get_original_goal : whether to include the desired goal in the dataset
+            dataset_statistics : dict containing the statistics of the dataset
+        """
         self.trajectories = trajectories  # list of T rollouts
         self.pred_horizon = pred_horizon
         self.action_horizon = action_horizon
@@ -321,34 +331,25 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
             np.array(train_goal_image_data).astype(np.float32) / 255.0
         )
 
+        self.train_data = {
+            "agent_pos": np.concatenate(
+                train_agent_pos_data, axis=0
+            ),  # (N, 2)
+            "action": np.concatenate(train_action_data, axis=0),  # (N, 2)
+            "image": train_image_data,  # (N, 3, 96, 96)
+            "reached_goal_agent_pos": np.concatenate(
+                train_reached_goals_agent_pos, axis=0
+            ),  # (N, 2)
+            "reached_goal_image": train_reached_goals_image,  # (N, 3, 96, 96)
+        }
+
         if get_original_goal:
-            self.train_data = {
-                "agent_pos": np.concatenate(
-                    train_agent_pos_data, axis=0
-                ),  # (N, 2)
-                "action": np.concatenate(train_action_data, axis=0),  # (N, 2)
-                "image": train_image_data,  # (N, 3, 96, 96)
-                "reached_goal_agent_pos": np.concatenate(
-                    train_reached_goals_agent_pos, axis=0
-                ),  # (N, 2)
-                "reached_goal_image": train_reached_goals_image,  # (N, 3, 96, 96)
-                "desired_goal_agent_pos": np.concatenate(
-                    train_desired_goal_agent_pos, axis=0
-                ),  # (T, 2)
-                "desired_goal_image": train_goal_image_data,  # (T, 3, 96, 96)
-            }
-        else:
-            self.train_data = {
-                "agent_pos": np.concatenate(
-                    train_agent_pos_data, axis=0
-                ),  # (N, 2)
-                "action": np.concatenate(train_action_data, axis=0),  # (N, 2)
-                "image": train_image_data,  # (N, 3, 96, 96)
-                "reached_goal_agent_pos": np.concatenate(
-                    train_reached_goals_agent_pos, axis=0
-                ),  # (N, 2)
-                "reached_goal_image": train_reached_goals_image,  # (N, 3, 96, 96)
-            }
+            self.train_data["desired_goal_agent_pos"] = np.concatenate(
+                train_desired_goal_agent_pos, axis=0
+            )  # (T, 2)
+            self.train_data["desired_goal_image"] = (
+                train_goal_image_data  # (T, 3, 96, 96)
+            )
 
         # compute episode ends as the length of each trajectory
         self.episode_ends = np.cumsum([len(t["states"]) for t in trajectories])
