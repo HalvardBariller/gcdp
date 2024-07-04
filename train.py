@@ -38,6 +38,7 @@ from gcdp.episodes import (
     get_random_rollout,
     get_guided_rollout,
     PushTDatasetFromTrajectories,
+    EnrichedDataset,
 )
 from gcdp.eval import eval_policy
 from gcdp.logging import init_logging
@@ -172,10 +173,13 @@ for p in range(policy_refinement):
             get_original_goal=False,
             dataset_statistics=demonstration_statistics,
         )
+        print("Dataset length:", len(dataset))
+        enriched_dataset = EnrichedDataset(dataset)
+        print("Enriched Dataset length:", len(enriched_dataset))
         # create dataloader
         dataloader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=64,
+            enriched_dataset,
+            batch_size=batch_size,
             num_workers=0,
             shuffle=True,
             # accelerate cpu-gpu transfer
@@ -225,10 +229,11 @@ for p in range(policy_refinement):
             get_original_goal=False,
             dataset_statistics=demonstration_statistics,
         )
+        enriched_dataset = EnrichedDataset(dataset)
         # update dataloader
         dataloader = torch.utils.data.DataLoader(
-            dataset,
-            batch_size=64,
+            enriched_dataset,
+            batch_size=batch_size,
             num_workers=0,
             shuffle=True,
             # accelerate cpu-gpu transfer

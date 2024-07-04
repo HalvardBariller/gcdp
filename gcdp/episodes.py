@@ -10,6 +10,7 @@ import collections
 import gymnasium as gym
 import numpy as np
 import torch
+import warnings
 
 from diffusers import DDPMScheduler
 
@@ -275,6 +276,14 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         train_desired_goal_agent_pos = []
         train_desired_goal_image = []
 
+        # if len(trajectories) > 1:
+        #     warnings.warn(
+        #         "The dataset is created from multiple trajectories."
+        #         "Enriching the dataset with subsequent goals is not supported.",
+        #         UserWarning,
+        #         stacklevel=1,
+        #     )
+
         for t in trajectories:
             split = split_trajectory(t)
             train_image_data.append(split["states_pixels"])
@@ -364,6 +373,11 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
             # pad_after=0,
         )
 
+        # compute the number of transitions for each episode
+        self.episode_lengths = [
+            np.sum(self.indices[:, 0] < end) for end in self.episode_ends
+        ]
+
         # compute statistics and normalized data to [-1,1]
         if dataset_statistics is not None:
             stats = dataset_statistics
@@ -417,3 +431,68 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         nsample["agent_pos"] = nsample["agent_pos"][: self.obs_horizon, :]
 
         return nsample
+
+
+class EnrichedDataset(torch.utils.data.Dataset):
+    """Enriched dataset that includes all subsequent goals of the original dataset."""
+
+    def __init__(self, original_dataset):
+        """Initialize the dataset.
+
+        Inputs:
+            original_dataset: the original dataset to enrich (created w/ PushTDatasetFromTrajectories)
+        """
+        self.original_dataset = original_dataset
+        self.enriched_data = []
+        self.episode_lengths = original_dataset.episode_lengths
+        self._enrich_dataset()
+
+    def _enrich_dataset(self):
+        n = len(self.original_dataset)
+        for i in range(n):
+            item = self.original_dataset[i]
+            agent_pos = item["agent_pos"]
+            action = item["action"]
+            image = item["image"]
+            reached_goal_agent_pos = item["reached_goal_agent_pos"]
+            reached_goal_image = item["reached_goal_image"]
+
+            # Original entry
+            self.enriched_data.append(
+                {
+                    "agent_pos": agent_pos,
+                    "action": action,
+                    "image": image,
+                    "reached_goal_agent_pos": reached_goal_agent_pos,
+                    "reached_goal_image": reached_goal_image,
+                }
+            )
+
+            # Add duplicate entries for subsequent goals
+            current_episode_end = next(
+                episode_end
+                for episode_end in self.episode_lengths
+                if i < episode_end
+            )
+            for j in range(i + 1, current_episode_end):
+                # print(f"Enriching dataset: {i}/{n} - {j}/{n}")
+                future_item = self.original_dataset[j]
+                future_goal_pos = future_item["reached_goal_agent_pos"]
+                future_goal_image = future_item["reached_goal_image"]
+                self.enriched_data.append(
+                    {
+                        "agent_pos": agent_pos,
+                        "action": action,
+                        "image": image,
+                        "reached_goal_agent_pos": future_goal_pos,
+                        "reached_goal_image": future_goal_image,
+                    }
+                )
+
+    def __len__(self):
+        """Return the number of samples in the dataset."""
+        return len(self.enriched_data)
+
+    def __getitem__(self, idx):
+        """Get a sample from the dataset."""
+        return self.enriched_data[idx]
