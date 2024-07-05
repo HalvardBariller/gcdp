@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import warnings
 
-from diffusers import DDPMScheduler
+from diffusers import DDPMScheduler, DDIMScheduler
 
 from gcdp.policy import diff_policy
 from gcdp.utils import ScaleRewardWrapper, normalize_data
@@ -67,7 +67,7 @@ def get_guided_rollout(
     device: torch.device,
     network_params: dict,
     normalization_stats: dict,
-    noise_scheduler: DDPMScheduler,
+    noise_scheduler: DDPMScheduler | DDIMScheduler,
 ):
     """
     Simulate an episode of the environment using the given policy.

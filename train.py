@@ -25,7 +25,7 @@ import torch.nn as nn
 import tqdm
 import wandb
 
-from diffusers import DDPMScheduler
+from diffusers import DDPMScheduler, DDIMScheduler
 from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 
@@ -71,7 +71,7 @@ network_params = {
     "pred_horizon": 16,
     "action_horizon": 8,
     "action_dim": 2,
-    "num_diffusion_iters": 10,
+    "num_diffusion_iters": 5,
     "num_diffusion_iters_train": 50,
     "batch_size": 128,
     "policy_refinement": 10,
@@ -128,9 +128,20 @@ nets = nn.ModuleDict(
     {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
 )
 ema_nets = nets
+
 # for this demo, we use DDPMScheduler with 50 diffusion iterations
 num_diffusion_iters = network_params["num_diffusion_iters_train"]
-noise_scheduler = DDPMScheduler(
+# noise_scheduler = DDPMScheduler(
+#     num_train_timesteps=num_diffusion_iters,
+#     # the choise of beta schedule has big impact on performance
+#     # we found squared cosine works the best
+#     beta_schedule="squaredcos_cap_v2",
+#     # clip output to [-1,1] to improve stability
+#     clip_sample=True,
+#     # our network predicts noise (instead of denoised action)
+#     prediction_type="epsilon",
+# )
+noise_scheduler = DDIMScheduler(
     num_train_timesteps=num_diffusion_iters,
     # the choise of beta schedule has big impact on performance
     # we found squared cosine works the best
@@ -140,6 +151,7 @@ noise_scheduler = DDPMScheduler(
     # our network predicts noise (instead of denoised action)
     prediction_type="epsilon",
 )
+
 # device transfer
 device = torch.device("cuda")
 _ = nets.to(device)

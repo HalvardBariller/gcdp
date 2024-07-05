@@ -1,2 +1,2 @@
 # gcdp
-Goal-Conditioned Diffusion Policy (GCDP)
+Goal-Conditioned Diffusion Policy (GCDP).

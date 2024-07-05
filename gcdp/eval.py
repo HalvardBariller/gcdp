@@ -1,14 +1,17 @@
 """This script contains the function to evaluate a policy in a Gym environment."""
 
 import collections
-import gym
+import gymnasium as gym
 import numpy as np
+import pymunk
+import shapely.geometry as sg
 import tqdm
-from gcdp.policy import diff_policy
 
 from copy import deepcopy
+from gcdp.policy import diff_policy
 from gymnasium.wrappers import RecordVideo
 from pathlib import Path
+from pymunk.vec2d import Vec2d
 
 
 def eval_policy(
@@ -122,3 +125,67 @@ def eval_policy(
         episode_results["rollout_video"] = video_files[0]
 
     return episode_results
+
+
+def compute_coverage(info):
+    """
+    Compute the coverage of the block over the goal area.
+
+    This function is adapted from the Push-T environment:
+    https://github.com/huggingface/gym-pusht/blob/main/gym_pusht/envs/pusht.py
+
+    Parameters:
+        info (dict): Dictionary containing the block and goal pose information.
+    Returns:
+        float: The coverage of the block over the goal area.
+    """
+
+    def pymunk_to_shapely(body, shapes):
+        """
+        Convert a pymunk body with shapes to a shapely geometry.
+
+        Parameters:
+            body (pymunk.Body): The pymunk body.
+            shapes (list): List of pymunk shapes attached to the body.
+        Returns:
+            shapely.geometry.base.BaseGeometry: The shapely geometry.
+        """
+        geoms = []
+        for shape in shapes:
+            if isinstance(shape, pymunk.shapes.Poly):
+                verts = [body.local_to_world(v) for v in shape.get_vertices()]
+                verts += [verts[0]]
+                geoms.append(sg.Polygon(verts))
+            else:
+                raise RuntimeError(f"Unsupported shape type {type(shape)}")
+        geom = sg.MultiPolygon(geoms)
+        return geom
+
+    # Extract the necessary information from the dictionary
+    block_pose = info["block_pose"]
+    goal_pose = info["goal_pose"]
+
+    # Create a pymunk body for the block and the goal
+    block_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+    block_body.position = tuple(block_pose[:2])  # Convert numpy array to tuple
+    block_body.angle = block_pose[2]
+
+    goal_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+    goal_body.position = tuple(goal_pose[:2])  # Convert numpy array to tuple
+    goal_body.angle = goal_pose[2]
+
+    # Create a shapely polygon for the block and the goal
+    block_shape = pymunk.Poly.create_box(block_body, size=(50, 100))
+    goal_shape = pymunk.Poly.create_box(goal_body, size=(50, 100))
+
+    block_geom = pymunk_to_shapely(block_body, [block_shape])
+    goal_geom = pymunk_to_shapely(goal_body, [goal_shape])
+
+    # Compute the intersection area and the goal area
+    intersection_area = goal_geom.intersection(block_geom).area
+    goal_area = goal_geom.area
+
+    # Compute the coverage
+    coverage = intersection_area / goal_area
+
+    return coverage

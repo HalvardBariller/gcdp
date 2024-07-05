@@ -5,12 +5,12 @@ import numpy as np
 import torch
 
 from gcdp.utils import normalize_data, unnormalize_data
-from diffusers import DDPMScheduler
+from diffusers import DDPMScheduler, DDIMScheduler
 
 
 def diff_policy(
     model: torch.ModuleDict,
-    noise_scheduler: DDPMScheduler,
+    noise_scheduler: DDPMScheduler | DDIMScheduler,
     observations: collections.deque,
     goal: dict,
     device: torch.device,
