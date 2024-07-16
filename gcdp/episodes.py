@@ -18,18 +18,21 @@ from gcdp.policy import diff_policy
 from gcdp.utils import ScaleRewardWrapper, normalize_data
 
 
-def get_random_rollout(episode_length=50, env=None):
+def get_random_rollout(episode_length=50, env=None, get_block_poses=False):
     """
     Simulate an episode of the environment using the given policy.
 
     Inputs:
         episode_length : length of the simulation
         env : gym environment
-    Outputs: dict containing the following keys:
-        states : list of states (dicts) of the agent
-        actions : list of actions taken by the agent
-        reached_goals : list of states (dicts) of the agent after taking the actions
-        desired_goal : the goal that the agent was trying to reach
+        get_block_poses : whether to return the block poses (used for evaluation on intermediary goals)
+    Outputs:
+        dict containing the following keys:
+            states : list of states (dicts) of the agent
+            actions : list of actions taken by the agent
+            reached_goals : list of states (dicts) of the agent after taking the actions
+            desired_goal : the goal that the agent was trying to reach
+        list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
     """
     if env is None:
         env = gym.make(
@@ -40,6 +43,7 @@ def get_random_rollout(episode_length=50, env=None):
         env = ScaleRewardWrapper(env)
     # desired_goal = env.observation_space.sample() # Random samp. had no meaning
     desired_goal, _ = env.reset()  # Reset is random
+    block_poses = []
 
     s, _ = env.reset()
     states = []
@@ -49,8 +53,17 @@ def get_random_rollout(episode_length=50, env=None):
         action = env.action_space.sample()
         states.append(s)
         actions.append(action)
-        s, _, _, _, _ = env.step(action)
+        s, _, _, _, infos = env.step(action)
         reached_goals.append(s)
+        block_poses.append(infos["block_pose"])
+
+    if get_block_poses:
+        return {
+            "states": states,
+            "actions": actions,
+            "reached_goals": reached_goals,
+            "desired_goal": desired_goal,
+        }, block_poses
 
     return {
         "states": states,
@@ -68,6 +81,7 @@ def get_guided_rollout(
     network_params: dict,
     normalization_stats: dict,
     noise_scheduler: DDPMScheduler | DDIMScheduler,
+    get_block_poses: bool = False,
 ):
     """
     Simulate an episode of the environment using the given policy.
@@ -80,11 +94,14 @@ def get_guided_rollout(
         device: the device to use
         network_params: the parameters of the network
         normalization_stats: the statistics used to normalize the data
-    Outputs: dict containing the following
-        states : list of states (dicts) of the agent
-        actions : list of actions taken by the agent
-        reached_goals : list of states (dicts) of the agent after taking the actions
-        desired_goal : the goal that the agent was trying to reach
+        get_block_poses : whether to return the block poses (used for evaluation on intermediary goals)
+    Outputs:
+        dict containing the following
+            states : list of states (dicts) of the agent
+            actions : list of actions taken by the agent
+            reached_goals : list of states (dicts) of the agent after taking the actions
+            desired_goal : the goal that the agent was trying to reach
+        list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
     """
     if env is None:
         env = gym.make(
@@ -102,6 +119,7 @@ def get_guided_rollout(
         [s] * network_params["obs_horizon"],
         maxlen=network_params["obs_horizon"],
     )
+    block_poses = []
     for _ in range(episode_length):
         action = diff_policy(
             model=model,
@@ -117,8 +135,17 @@ def get_guided_rollout(
         states.append(s)
         observations.append(s)
         actions.append(action)
-        s, _, _, _, _ = env.step(action)
+        s, _, _, _, infos = env.step(action)
         reached_goals.append(s)
+        block_poses.append(infos["block_pose"])
+
+    if get_block_poses:
+        return {
+            "states": states,
+            "actions": actions,
+            "reached_goals": reached_goals,
+            "desired_goal": desired_goal,
+        }, block_poses
 
     return {
         "states": states,

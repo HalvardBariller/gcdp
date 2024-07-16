@@ -40,7 +40,7 @@ from gcdp.episodes import (
     PushTDatasetFromTrajectories,
     EnrichedDataset,
 )
-from gcdp.eval import eval_policy
+from gcdp.eval import eval_policy, eval_policy_on_interm_goals
 from gcdp.logging import init_logging
 from gcdp.utils import ScaleRewardWrapper, set_global_seed
 
@@ -74,13 +74,14 @@ network_params = {
     "num_diffusion_iters": 5,
     "num_diffusion_iters_train": 50,
     "batch_size": 128,
-    "policy_refinement": 10,
+    "policy_refinement": 20,
     "num_epochs": 10,
     "episode_length": 50,
     "num_episodes": 50,
     "seed": 42,
 }
 eval = True
+eval_intermediate_goals = True
 
 # Set seed for reproducibility
 set_global_seed(network_params["seed"])
@@ -172,10 +173,12 @@ ema = EMAModel(parameters=nets.parameters(), power=0.75)
 logging.info("Training Diffusion Model.")
 for p in range(policy_refinement):
     if p == 0:
-        trajectories = [
-            get_random_rollout(episode_length=episode_length, env=env)
-            for _ in range(num_episodes)
-        ]
+        trajectories = []
+        for _ in range(num_episodes):
+            trajectory, block_poses = get_random_rollout(
+                episode_length=episode_length, env=env, get_block_poses=True
+            )
+            trajectories.append(trajectory)
         # create dataset
         dataset = PushTDatasetFromTrajectories(
             trajectories,
@@ -220,8 +223,21 @@ for p in range(policy_refinement):
         logging.info("Dataset contains %d samples.", len(dataset))
     else:
         logging.info("Generating new trajectories...")
-        trajectories = [
-            get_guided_rollout(
+        # trajectories = [
+        #     get_guided_rollout(
+        #         episode_length=episode_length,
+        #         env=env,
+        #         model=ema_nets,
+        #         device=device,
+        #         network_params=network_params,
+        #         normalization_stats=demonstration_statistics,
+        #         noise_scheduler=noise_scheduler,
+        #     )
+        #     for _ in range(num_episodes)
+        # ]
+        trajectories = []
+        for _ in range(num_episodes):
+            trajectory, block_poses = get_guided_rollout(
                 episode_length=episode_length,
                 env=env,
                 model=ema_nets,
@@ -229,9 +245,9 @@ for p in range(policy_refinement):
                 network_params=network_params,
                 normalization_stats=demonstration_statistics,
                 noise_scheduler=noise_scheduler,
+                get_block_poses=True,
             )
-            for _ in range(num_episodes)
-        ]
+            trajectories.append(trajectory)
         # update dataset
         dataset = PushTDatasetFromTrajectories(
             trajectories,
@@ -449,6 +465,65 @@ for p in range(policy_refinement):
                     )
                 }
             )
+    if eval_intermediate_goals:
+        logging.info("Evaluating the model on intermediate goals.")
+        env = gym.make(
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
+        )
+        env = ScaleRewardWrapper(env)
+        # Get a random goal
+        goal_idx = random.randint(0, len(block_poses) - 1)
+        block_pose_eval = block_poses[goal_idx]
+        target = trajectory["reached_goals"][goal_idx]
+
+        eval_interm_results = eval_policy_on_interm_goals(
+            env=env,
+            num_episodes=10,
+            max_steps=200,
+            save_video=True,
+            video_path="video/pusht/intermediate_goals",
+            video_prefix="pusht_policy_refinement_" + str(p),
+            seed=network_params["seed"] + 1,
+            model=ema_nets,
+            noise_scheduler=noise_scheduler,
+            observations=obs_horizon,
+            device=device,
+            network_params=network_params,
+            normalization_stats=demonstration_statistics,
+            target=target,
+            target_block_pose=block_pose_eval,
+        )
+        interm_goal = wandb.Image(
+            eval_interm_results["last goal"], caption="Last Goal"
+        )
+        wandb.log(
+            {
+                "interm/success_rate": eval_interm_results["success_rate"],
+                "interm/average_reward": eval_interm_results["average_reward"],
+                "interm/sum_rewards": sum(eval_interm_results["rewards"]),
+                "interm/policy_refinement": p + 1,
+                "interm/goal_conditioning": interm_goal,
+            },
+        )
+        if "rollout_video" in eval_interm_results:
+            print(
+                "Type of rollout_video:",
+                type(eval_interm_results["rollout_video"]),
+            )
+            print(
+                "Content of rollout_video:",
+                eval_interm_results["rollout_video"],
+            )
+            wandb.log(
+                {
+                    "interm/rollout_video": wandb.Video(
+                        str(eval_interm_results["rollout_video"]), fps=4
+                    )
+                }
+            )
+
 
 # Save the model
 # torch.save(ema_nets, "objects/pusht_model_"+str(p)+".pt")
