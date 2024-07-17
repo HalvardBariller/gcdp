@@ -8,7 +8,7 @@ import shapely.geometry as sg
 import tqdm
 
 from copy import deepcopy
-from gcdp.policy import diff_policy
+from gcdp.model.policy import diff_policy
 from gymnasium.wrappers import RecordVideo
 from pathlib import Path
 from pymunk.vec2d import Vec2d

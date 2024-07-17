@@ -4,3 +4,4 @@ gym_videos/
 video/
 **/__pycache__
 wandb/
+gcdp/__pycache__

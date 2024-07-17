@@ -29,20 +29,20 @@ from diffusers import DDPMScheduler, DDIMScheduler
 from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
 
-from gcdp.diffusion import (
+from gcdp.model.diffusion import (
     get_resnet,
     replace_bn_with_gn,
     ConditionalUnet1D,
 )
-from gcdp.episodes import (
+from gcdp.scripts.episodes import (
     get_random_rollout,
     get_guided_rollout,
     PushTDatasetFromTrajectories,
     EnrichedDataset,
 )
-from gcdp.eval import eval_policy, eval_policy_on_interm_goals
-from gcdp.logging import init_logging
-from gcdp.utils import ScaleRewardWrapper, set_global_seed
+from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
+from gcdp.scripts.logger import init_logging
+from gcdp.scripts.utils import ScaleRewardWrapper, set_global_seed
 
 # Create the environment with sparse rewards
 env = gym.make(
@@ -86,7 +86,7 @@ eval_intermediate_goals = True
 # Set seed for reproducibility
 set_global_seed(network_params["seed"])
 # Configure logging
-init_logging()
+log = init_logging()
 # Initialize wandb
 wandb.init(
     project="GCDP",
@@ -170,7 +170,7 @@ ema = EMAModel(parameters=nets.parameters(), power=0.75)
 #     betas=(0.95, 0.999),
 # )
 
-logging.info("Training Diffusion Model.")
+log.info("Training Diffusion Model.")
 for p in range(policy_refinement):
     if p == 0:
         trajectories = []
@@ -218,23 +218,11 @@ for p in range(policy_refinement):
             * num_epochs
             * policy_refinement,
         )
-        # Log the network parameters
-        logging.info("Network Parameters: %s", network_params)
-        logging.info("Dataset contains %d samples.", len(dataset))
+
+        log.info("Network Parameters: %s", network_params)
+        log.info("Dataset contains %d samples.", len(dataset))
     else:
-        logging.info("Generating new trajectories...")
-        # trajectories = [
-        #     get_guided_rollout(
-        #         episode_length=episode_length,
-        #         env=env,
-        #         model=ema_nets,
-        #         device=device,
-        #         network_params=network_params,
-        #         normalization_stats=demonstration_statistics,
-        #         noise_scheduler=noise_scheduler,
-        #     )
-        #     for _ in range(num_episodes)
-        # ]
+        log.info("Generating new trajectories...")
         trajectories = []
         for _ in range(num_episodes):
             trajectory, block_poses = get_guided_rollout(
@@ -273,7 +261,7 @@ for p in range(policy_refinement):
     with tqdm.tqdm(range(num_epochs), desc="Epoch") as tglobal:
         # epoch loop
         for nepoch in tglobal:
-            logging.info("EPOCH: %d  ", nepoch + 1)
+            log.info("EPOCH: %d  ", nepoch + 1)
             epoch_loss = []
             # batch loop
             step = 0
@@ -385,7 +373,7 @@ for p in range(policy_refinement):
                     )
 
                     if step % 10 == 0:
-                        logging.info(" | ".join(log_items))
+                        log.info(" | ".join(log_items))
 
                     # optimize
                     loss.backward()
@@ -410,7 +398,7 @@ for p in range(policy_refinement):
                 f"Epoch Loss: {np.mean(epoch_loss):.3f}",
                 f"Learning Rate: {optimizer.param_groups[0]['lr']:0.1e}",
             ]
-            logging.info(" | ".join(log_epoch))
+            log.info(" | ".join(log_epoch))
 
     # Weights of the EMA model
     # is used for inference
@@ -419,7 +407,7 @@ for p in range(policy_refinement):
 
     if eval:
         # Evaluate the model
-        logging.info("Evaluating the model.")
+        log.info("Evaluating the model.")
         env = gym.make(
             "gym_pusht/PushT-v0",
             obs_type="pixels_agent_pos",
@@ -466,7 +454,7 @@ for p in range(policy_refinement):
                 }
             )
     if eval_intermediate_goals:
-        logging.info("Evaluating the model on intermediate goals.")
+        log.info("Evaluating the model on intermediate goals.")
         env = gym.make(
             "gym_pusht/PushT-v0",
             obs_type="pixels_agent_pos",

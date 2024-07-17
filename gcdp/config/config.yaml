@@ -1,0 +1,57 @@
+hydra:
+  run:
+    dir: runs/outputs/train/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}
+  job:
+    name: default
+
+device: cuda
+use_amp: false
+resume: false
+seed: 1000
+
+env:
+  task: pusht
+  sparse_reward: true
+
+data_generation:
+  episode_length: 200
+  num_episodes: 20
+
+network_params:
+  obs_horizon: 2
+  pred_horizon: 16
+  action_horizon: 8
+  action_dim: 2
+  num_diffusion_iters: 5
+  num_diffusion_iters_train: 50
+
+training:
+  policy_refinement: 20
+  num_epochs: 10
+  batch_size: 128
+
+optim:
+  name: Adam
+  lr: 1e-4
+  betas: (0.95, 0.999)
+  eps:
+  weight_decay: 0.0001
+  lr_scheduler:
+    name: StepLR
+    step_size: 10
+    gamma: 0.1
+
+  # weight_decay: 0.0001
+  # lr_scheduler:
+  #   name: StepLR
+  #   step_size: 10
+  #   gamma: 0.1
+
+evaluation:
+  eval: true
+  intermediate_goals: true
+
+wandb:
+  enable: false
+  disable_artifact: true
+  project: GCDP

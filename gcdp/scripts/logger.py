@@ -1,10 +1,13 @@
 """This script is used to configure the logging for the project."""
 
-# The following code was adapted from the project LeRobot:
+# The following code was either adapted or taken from the project LeRobot:
 # https://github.com/huggingface/lerobot
 
+from pathlib import Path
 import logging
+from omegaconf import DictConfig, OmegaConf
 import os
+from termcolor import colored
 import sys
 
 from datetime import datetime
@@ -28,78 +31,111 @@ def init_logging():
     formatter.format = custom_format
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(console_handler)
+    log = logging.getLogger()
+    log.addHandler(console_handler)
+    # return log
 
 
-# class Logger:
-#     """Primary logger object. Logs either locally or using wandb.
+def log_output_dir(out_dir):
+    """Log the output directory."""
+    logging.info(
+        colored("Output dir:", "yellow", attrs=["bold"]) + f" {out_dir}"
+    )
 
-#     The logger creates the following directory structure:
 
-#     provided_log_dir
-#     ├── .hydra  # hydra's configuration cache
-#     ├── checkpoints
-#     │   ├── specific_checkpoint_name
-#     │   │   ├── pretrained_model  # Hugging Face pretrained model directory
-#     │   │   │   ├── ...
-#     │   │   └── training_state.pth  # optimizer, scheduler, and random states + training step
-#     |   ├── another_specific_checkpoint_name
-#     │   │   ├── ...
-#     |   ├── ...
-#     │   └── last  # a softlink to the last logged checkpoint
-#     """
+def cfg_to_group(
+    cfg: DictConfig, return_list: bool = False
+) -> list[str] | str:
+    """Return a group name for logging. Optionally returns group name as list."""
+    lst = [
+        f"env:{cfg.env.task}",
+        f"seed:{cfg.seed}",
+    ]
+    return lst if return_list else "-".join(lst)
 
-#     pretrained_model_dir_name = "pretrained_model"
-#     training_state_file_name = "training_state.pth"
 
-#     def __init__(self, cfg: DictConfig, log_dir: str, wandb_job_name: str | None = None):
-#         """
-#         Args:
-#             log_dir: The directory to save all logs and training outputs to.
-#             job_name: The WandB job name.
-#         """
-#         self._cfg = cfg
-#         self.log_dir = Path(log_dir)
-#         self.log_dir.mkdir(parents=True, exist_ok=True)
-#         self.checkpoints_dir = self.get_checkpoints_dir(log_dir)
-#         self.last_checkpoint_dir = self.get_last_checkpoint_dir(log_dir)
-#         self.last_pretrained_model_dir = self.get_last_pretrained_model_dir(log_dir)
+class Logger:
+    """Primary logger object. Logs either locally or using wandb.
 
-#         # Set up WandB.
-#         self._group = cfg_to_group(cfg)
-#         project = cfg.get("wandb", {}).get("project")
-#         entity = cfg.get("wandb", {}).get("entity")
-#         enable_wandb = cfg.get("wandb", {}).get("enable", False)
-#         run_offline = not enable_wandb or not project
-#         if run_offline:
-#             logging.info(colored("Logs will be saved locally.", "yellow", attrs=["bold"]))
-#             self._wandb = None
-#         else:
-#             os.environ["WANDB_SILENT"] = "true"
-#             import wandb
+    The logger creates the following directory structure:
 
-#             wandb_run_id = None
-#             if cfg.resume:
-#                 wandb_run_id = get_wandb_run_id_from_filesystem(self.checkpoints_dir)
+    provided_log_dir
+    ├── .hydra  # hydra's configuration cache
+    ├── checkpoints
+    │   ├── specific_checkpoint_name
+    │   │   ├── pretrained_model  # Hugging Face pretrained model directory
+    │   │   │   ├── ...
+    │   │   └── training_state.pth  # optimizer, scheduler, and random states + training step
+    |   ├── another_specific_checkpoint_name
+    │   │   ├── ...
+    |   ├── ...
+    │   └── last  # a softlink to the last logged checkpoint
+    """
 
-#             wandb.init(
-#                 id=wandb_run_id,
-#                 project=project,
-#                 entity=entity,
-#                 name=wandb_job_name,
-#                 notes=cfg.get("wandb", {}).get("notes"),
-#                 tags=cfg_to_group(cfg, return_list=True),
-#                 dir=log_dir,
-#                 config=OmegaConf.to_container(cfg, resolve=True),
-#                 # TODO(rcadene): try set to True
-#                 save_code=False,
-#                 # TODO(rcadene): split train and eval, and run async eval with job_type="eval"
-#                 job_type="train_eval",
-#                 resume="must" if cfg.resume else None,
-#             )
-#             print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
-#             logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
-#             self._wandb = wandb
+    pretrained_model_dir_name = "pretrained_model"
+    training_state_file_name = "training_state.pth"
+
+    def __init__(
+        self, cfg: DictConfig, log_dir: str, wandb_job_name: str | None = None
+    ):
+        """
+        Initialize the logger.
+
+        Args:
+            log_dir: The directory to save all logs and training outputs to.
+            job_name: The WandB job name.
+        """
+        self._cfg = cfg
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        # self.checkpoints_dir = self.get_checkpoints_dir(log_dir)
+        # self.last_checkpoint_dir = self.get_last_checkpoint_dir(log_dir)
+        # self.last_pretrained_model_dir = self.get_last_pretrained_model_dir(log_dir)
+
+        # Set up WandB.
+        self._group = cfg_to_group(cfg)
+        project = cfg.get("wandb", {}).get("project")
+        entity = cfg.get("wandb", {}).get("entity")
+        enable_wandb = cfg.get("wandb", {}).get("enable", False)
+        run_offline = not enable_wandb or not project
+        if run_offline:
+            logging.info(
+                colored(
+                    "Logs will be saved locally.", "yellow", attrs=["bold"]
+                )
+            )
+            self._wandb = None
+        else:
+            os.environ["WANDB_SILENT"] = "true"
+            import wandb
+
+            wandb_run_id = None
+            # if cfg.resume:
+            #     wandb_run_id = get_wandb_run_id_from_filesystem(self.checkpoints_dir)
+
+            wandb.init(
+                id=wandb_run_id,
+                project=project,
+                entity=entity,
+                name=wandb_job_name,
+                notes=cfg.get("wandb", {}).get("notes"),
+                tags=cfg_to_group(cfg, return_list=True),
+                dir=log_dir,
+                config=OmegaConf.to_container(cfg, resolve=True),
+                save_code=False,
+                job_type="train_eval",
+                resume="must" if cfg.resume else None,
+            )
+            print(
+                colored(
+                    "Logs will be synced with wandb.", "blue", attrs=["bold"]
+                )
+            )
+            logging.info(
+                f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}"
+            )
+            self._wandb = wandb
+
 
 # @classmethod
 # def get_checkpoints_dir(cls, log_dir: str | Path) -> Path:
@@ -213,13 +249,3 @@ def init_logging():
 #     assert self._wandb is not None
 #     wandb_video = self._wandb.Video(video_path, fps=self._cfg.fps, format="mp4")
 #     self._wandb.log({f"{mode}/video": wandb_video}, step=step)
-
-
-# class Logger:
-#     """Primary logger object. Logs either locally or using wandb."""
-
-#     def __init__(self, cfg, log_dir, wandb_job_name=None):
-
-
-#     def log_train_wandb(cfg, step, **kwargs):
-#         """Log training metrics to WandB."""
