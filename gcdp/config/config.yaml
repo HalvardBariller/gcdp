@@ -18,22 +18,26 @@ env:
 data_generation:
   episode_length: 200
   num_episodes: 20
+  get_block_poses: true
+  enrich_data: true
+  get_original_goal: false
 
 
 training:
   policy_refinement: 20
   num_epochs: 10
   batch_size: 128
+  num_workers: 4
 
 optim:
   name: adam
   lr: 1e-4
-  betas: (0.95, 0.999)
+  betas: [0.95, 0.999]
   eps: 1e-8
   weight_decay: 1e-6
   scheduler:
     name: cosine
-    num_warm_up_steps: 500
+    num_warmup_steps: 500
 
 model:
   vision_encoder:

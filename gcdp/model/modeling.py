@@ -53,11 +53,11 @@ def make_diffusion_model(cfg: DictConfig):
     return nets, ema_nets, ema, noise_scheduler
 
 
-def make_optimizer_and_scheduler(cfg, policy, num_training_examples):
+def make_optimizer_and_scheduler(cfg, model, num_training_examples):
     """Create the optimizer and scheduler."""
     if cfg.optim.name == "adam":
         optimizer = torch.optim.Adam(
-            policy.parameters(),
+            model.parameters(),
             lr=cfg.optim.lr,
             eps=cfg.optim.eps,
             betas=cfg.optim.betas,
@@ -65,7 +65,7 @@ def make_optimizer_and_scheduler(cfg, policy, num_training_examples):
         )
     elif cfg.optim.name == "adamw":
         optimizer = torch.optim.AdamW(
-            policy.parameters(),
+            model.parameters(),
             lr=cfg.optim.lr,
             eps=cfg.optim.eps,
             betas=cfg.optim.betas,

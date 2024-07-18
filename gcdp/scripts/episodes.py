@@ -9,6 +9,7 @@ to create a dataset of transitions from the trajectories.
 import collections
 import gymnasium as gym
 import numpy as np
+from omegaconf import DictConfig
 import torch
 import warnings
 
@@ -524,3 +525,29 @@ class EnrichedDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         """Get a sample from the dataset."""
         return self.enriched_data[idx]
+
+
+def build_dataset(
+    cfg: DictConfig, trajectories: list, dataset_statistics: dict
+):
+    """
+    Build a dataset from the given trajectories.
+
+    Inputs:
+        cfg : configuration file
+        trajectories : list of trajectories
+        dataset_statistics : dict containing the statistics of the dataset
+    Outputs:
+        dataset : torch.utils.data.Dataset
+    """
+    dataset = PushTDatasetFromTrajectories(
+        trajectories=trajectories,
+        pred_horizon=cfg.model.pred_horizon,
+        obs_horizon=cfg.model.obs_horizon,
+        action_horizon=cfg.model.action_horizon,
+        get_original_goal=cfg.data_generation.get_original_goal,
+        dataset_statistics=dataset_statistics,
+    )
+    if cfg.data_generation.enrich_data:
+        dataset = EnrichedDataset(dataset)
+    return dataset
