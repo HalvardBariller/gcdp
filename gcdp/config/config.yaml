@@ -12,18 +12,13 @@ seed: 1000
 env:
   task: pusht
   sparse_reward: true
+  agent_pos_dim: 2
+
 
 data_generation:
   episode_length: 200
   num_episodes: 20
 
-network_params:
-  obs_horizon: 2
-  pred_horizon: 16
-  action_horizon: 8
-  action_dim: 2
-  num_diffusion_iters: 5
-  num_diffusion_iters_train: 50
 
 training:
   policy_refinement: 20
@@ -31,21 +26,33 @@ training:
   batch_size: 128
 
 optim:
-  name: Adam
+  name: adam
   lr: 1e-4
   betas: (0.95, 0.999)
-  eps:
-  weight_decay: 0.0001
-  lr_scheduler:
-    name: StepLR
-    step_size: 10
-    gamma: 0.1
+  eps: 1e-8
+  weight_decay: 1e-6
+  scheduler:
+    name: cosine
+    num_warm_up_steps: 500
 
-  # weight_decay: 0.0001
-  # lr_scheduler:
-  #   name: StepLR
-  #   step_size: 10
-  #   gamma: 0.1
+model:
+  vision_encoder:
+    name: "resnet18"
+    feature_dim: 512
+  obs_horizon: 2
+  pred_horizon: 16
+  action_horizon: 8
+  action_dim: 2
+
+diffusion:
+  scheduler: "DDIM"
+  num_diffusion_iters_train: 50
+  num_diffusion_iters_eval: 5
+  beta_schedule: "squaredcos_cap_v2"
+  clip_sample: true
+  prediction_type: "epsilon"
+
+
 
 evaluation:
   eval: true

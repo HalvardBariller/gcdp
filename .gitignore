@@ -5,3 +5,4 @@ video/
 **/__pycache__
 wandb/
 gcdp/__pycache__
+runs/
