@@ -24,7 +24,7 @@ def make_diffusion_model(cfg: DictConfig):
     obs_horizon = cfg.model.obs_horizon
     action_dim = cfg.model.action_dim
     # TODO: TEST WITHOUT INTEGRATING AGENT IN GOAL
-    goal_dim = obs_dim + agent_feature_dim
+    goal_dim = vision_feature_dim + agent_feature_dim
     noise_pred_net = ConditionalUnet1D(
         input_dim=action_dim, global_cond_dim=obs_dim * obs_horizon + goal_dim
     )

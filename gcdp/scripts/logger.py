@@ -148,6 +148,20 @@ class Logger:
                     continue
                 self._wandb.log({f"{mode}/{k}": v}, step=step)
 
+    def log_video(self, video_path: str, step: int, mode: str = "eval"):
+        assert mode in {"train", "eval", "interm"}
+        assert self._wandb is not None
+        wandb_video = self._wandb.Video(
+            video_path, fps=self._cfg.fps, format="mp4"
+        )
+        self._wandb.log({f"{mode}/video": wandb_video}, step=step)
+
+    def log_image(self, image, caption: str, step: int, mode: str = "eval"):
+        assert mode in {"train", "eval", "interm"}
+        assert self._wandb is not None
+        wandb_image = self._wandb.Image(image, caption=caption)
+        self._wandb.log({f"{mode}/{caption}": wandb_image}, step=step)
+
     # @classmethod
     # def get_checkpoints_dir(cls, log_dir: str | Path) -> Path:
     #     """Given the log directory, get the sub-directory in which checkpoints will be saved."""
@@ -243,47 +257,45 @@ class Logger:
     #     set_global_random_state({k: training_state[k] for k in get_global_random_state()})
     #     return training_state["step"]
 
-    # def log_video(self, video_path: str, step: int, mode: str = "train"):
-    #     assert mode in {"train", "eval"}
-    #     assert self._wandb is not None
-    #     wandb_video = self._wandb.Video(video_path, fps=self._cfg.fps, format="mp4")
-    #     self._wandb.log({f"{mode}/video": wandb_video}, step=step)
 
-    # TODO
-    # def log_train_info(logger: Logger, info, step, cfg, dataset, is_offline):
-    # loss = info["loss"]
-    # grad_norm = info["grad_norm"]
-    # lr = info["lr"]
-    # update_s = info["update_s"]
+def log_train_info(logger: Logger, info, step, cfg):
+    """Log training information."""
+    loss = info["loss"]
+    grad_norm = info["grad_norm"]
+    lr = info["lr"]
+    step_time = info["step_time"]
+    policy_refinement = info["policy_refinement"]
+    epoch = info["epoch"]
+    step = info["step"]
     # dataloading_s = info["dataloading_s"]
 
-    # # A sample is an (observation,action) pair, where observation and action
-    # # can be on multiple timestamps. In a batch, we have `batch_size`` number of samples.
-    # num_samples = (step + 1) * cfg.training.batch_size
-    # avg_samples_per_ep = dataset.num_samples / dataset.num_episodes
-    # num_episodes = num_samples / avg_samples_per_ep
-    # num_epochs = num_samples / dataset.num_samples
-    # log_items = [
-    #     f"step:{format_big_number(step)}",
-    #     # number of samples seen during training
-    #     f"smpl:{format_big_number(num_samples)}",
-    #     # number of episodes seen during training
-    #     f"ep:{format_big_number(num_episodes)}",
-    #     # number of time all unique samples are seen
-    #     f"epch:{num_epochs:.2f}",
-    #     f"loss:{loss:.3f}",
-    #     f"grdn:{grad_norm:.3f}",
-    #     f"lr:{lr:0.1e}",
-    #     # in seconds
-    #     f"updt_s:{update_s:.3f}",
-    #     f"data_s:{dataloading_s:.3f}",  # if not ~0, you are bottlenecked by cpu or io
-    # ]
-    # logging.info(" ".join(log_items))
+    log_items = [
+        f"Policy Refinement: {policy_refinement}",
+        f"Epoch: {epoch}",
+        f"Step: {step}",
+        f"Loss: {loss:.3f}",
+        f"Learning Rate: {lr:0.1e}",
+        f"Gradient Norm: {grad_norm:.3f}",
+        f"Step Time: {step_time:.3f}s",
+        # f"data_s:{dataloading_s:.3f}",  # if not ~0, you are bottlenecked by cpu or io
+    ]
+    logging.info(" ".join(log_items))
+    logger.log_dict(info, step, mode="train")
 
-    # info["step"] = step
-    # info["num_samples"] = num_samples
-    # info["num_episodes"] = num_episodes
-    # info["num_epochs"] = num_epochs
-    # info["is_offline"] = is_offline
 
-    # logger.log_dict(info, step, mode="train")
+def log_eval_info(logger: Logger, info, step, cfg):
+    """Log evaluation information."""
+    success_rate = info["success_rate"]
+    average_reward = info["average_reward"]
+    sum_rewards = info["sum_rewards"]
+    policy_refinement = info["policy_refinement"]
+    log_items = [
+        f"Policy Refinement: {policy_refinement}",
+        f"Step: {step}",
+        f"Success Rate: {success_rate:.1f}%",
+        f"Average Reward: {average_reward:.3f}",
+        f"∑Rewards: {sum_rewards:.3f}",
+    ]
+    logging.info(" | ".join(log_items))
+    info = {k: v for k, v in info.items() if isinstance(v, (int, float, str))}
+    logger.log_dict(info, step, mode="eval")

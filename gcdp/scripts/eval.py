@@ -95,6 +95,8 @@ def eval_policy(
                 step += 1
                 if done:
                     task_completed = True
+                # Update the observations
+                observations.append(s)
             # Plan new actions
             else:
                 action_chunk = diff_policy(
@@ -108,12 +110,11 @@ def eval_policy(
                     actions_taken=actions_taken,
                 )
                 action_queue.extend(action_chunk)
-            # Update the observations
-            observations.append(s)
             if step > max_steps:
                 done = True
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
+        episode_results["sum_rewards"] = sum(episode_results["rewards"])
 
     env.close()
 
@@ -121,12 +122,11 @@ def eval_policy(
         sum(episode_results["success"]) / num_episodes
     )
     episode_results["average_reward"] = (
-        sum(episode_results["rewards"]) / num_episodes
+        episode_results["sum_rewards"] / num_episodes
     )
-    episode_results["last goal"] = goal["pixels"]
+    episode_results["last_goal"] = goal["pixels"]
 
     video_files = list(Path("video").rglob("*.mp4"))
-    print("video files", video_files)
     if video_files:
         episode_results["rollout_video"] = video_files[0]
 
@@ -300,6 +300,7 @@ def eval_policy_on_interm_goals(
                 done = True
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
+        episode_results["sum_rewards"] = sum(episode_results["rewards"])
 
     env.close()
 
@@ -309,10 +310,9 @@ def eval_policy_on_interm_goals(
     episode_results["average_reward"] = (
         sum(episode_results["rewards"]) / num_episodes
     )
-    episode_results["last goal"] = target["pixels"]
+    episode_results["last_goal"] = target["pixels"]
 
     video_files = list(Path("video").rglob("*.mp4"))
-    print("video files", video_files)
     if video_files:
         episode_results["rollout_video"] = video_files[0]
 

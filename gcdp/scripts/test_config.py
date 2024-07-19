@@ -1,6 +1,9 @@
 """Train the model from a configuration file."""
 
+import random
 import warnings
+
+from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
 
 warnings.filterwarnings(
     "ignore",
@@ -20,6 +23,7 @@ import hydra
 import os
 import torch
 import torch.nn as nn
+import time
 import tqdm
 
 from diffusers.optimization import get_scheduler
@@ -36,7 +40,13 @@ from gcdp.scripts.episodes import (
     get_guided_rollout,
     get_random_rollout,
 )
-from gcdp.scripts.logger import init_logging, Logger, log_output_dir
+from gcdp.scripts.logger import (
+    init_logging,
+    Logger,
+    log_eval_info,
+    log_output_dir,
+    log_train_info,
+)
 from gcdp.scripts.utils import (
     get_demonstration_statistics,
     pusht_init_env,
@@ -73,7 +83,15 @@ def build_params(cfg: DictConfig) -> dict:
 
 
 def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
-    """Compute the loss of the model."""
+    """Compute the loss of the model.
+
+    Args:
+        nbatch: Batch of data.
+        params (dict): Parameters of the network.
+        nets (nn.ModuleDict): Networks.
+        noise_scheduler: Noise scheduler.
+        cfg: Configuration file.
+    """
     obs_horizon = params["obs_horizon"]
     pred_horizon = params["pred_horizon"]
     device = cfg.device
@@ -200,7 +218,6 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         logging.info(
             f"Policy Refinement {p + 1}/{cfg.training.policy_refinement}"
         )
-
         # Initial random rollout
         if p == 0:
             if cfg.data_generation.get_block_poses:
@@ -234,7 +251,6 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 cfg, nets, len(dataset)
             )
             logging.info(f"Number of training examples: {len(dataset)}")
-
         # Rollout with refined policy
         else:
             logging.info("Generating Rollouts with Refined Policy.")
@@ -275,19 +291,138 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 num_workers=cfg.training.num_workers,
                 pin_memory=True,
             )
+        # Training
+        with tqdm.tqdm(
+            range(cfg.training.num_epochs), desc="Epoch", leave=False
+        ) as tglobal:
+            step = 0
+            for nepoch in tglobal:
+                logging.info(f"Epoch {nepoch + 1}/{cfg.training.num_epochs}")
+                epoch_losses = []
+                with tqdm.tqdm(
+                    dataloader, desc="Batch", leave=False
+                ) as tepoch:
+                    for nbatch in tepoch:
+                        step += 1
+                        optimizer.zero_grad()
+                        start_time = time.perf_counter()
+                        with torch.cuda.amp.autocast(enabled=cfg.use_amp):
+                            loss = compute_loss(
+                                nbatch, params, nets, noise_scheduler, cfg
+                            )
+                        grad_scaler.scale(loss).backward()
+                        grad_scaler.unscale_(optimizer)
+                        grad_norm = nn.utils.clip_grad_norm_(
+                            nets.parameters(), cfg.optim.grad_clip_norm
+                        )
+                        grad_scaler.step(optimizer)
+                        grad_scaler.update()
+                        optimizer.zero_grad()
+                        lr_scheduler.step()
+                        ema.step(nets.parameters())
+                        info = {
+                            "loss": loss.item(),
+                            "grad_norm": float(grad_norm),
+                            "lr": optimizer.param_groups[0]["lr"],
+                            "step_time": time.perf_counter() - start_time,
+                            "policy_refinement": p + 1,
+                            "epoch": nepoch + 1,
+                            "step": step,
+                        }
+                        if step % cfg.training.log_interval == 0:
+                            log_train_info(logger, info, step, cfg)
+                        epoch_losses.append(loss.item())
+            log_epoch = [
+                f"Epoch: {nepoch + 1}",
+                f"Epoch Loss: {np.mean(epoch_losses):.4f}",
+            ]
+            logging.info(" | ".join(log_epoch))
 
-        step = 0
-        with tqdm.tqdm(dataloader, desc="Batch", leave=False) as tepoch:
-            for nbatch in tepoch:
-                step += 1
-                optimizer.zero_grad()
-                loss = compute_loss(nbatch, params, nets, noise_scheduler, cfg)
-                grad_scaler.scale(loss).backward()
-                grad_scaler.step(optimizer)
-                grad_scaler.update()
-                lr_scheduler.step()
-                tepoch.set_postfix(loss=loss.item(), step=step)
-                logger.log_training_step(step, loss.item())
+        # Weights of the EMA model for inference
+        ema_nets = nets
+        ema.copy_to(ema_nets.parameters())
+
+        if cfg.save_model:
+            logging.info("Saving Model.")
+            torch.save(
+                ema_nets.state_dict(),
+                os.path.join(out_dir, "diffusion_model.pth"),
+            )
+            logging.info("Model Saved.")
+
+        if cfg.evaluation.eval:
+            logging.info("Evaluating Model.")
+            env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
+            with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
+                eval_results = eval_policy(
+                    env=env,
+                    num_episodes=cfg.evaluation.num_episodes,
+                    max_steps=cfg.evaluation.max_steps,
+                    save_video=cfg.evaluation.save_video,
+                    video_path="video/pusht",
+                    video_prefix="pusht_policy_refinement_" + str(p),
+                    seed=cfg.seed + 1,
+                    model=ema_nets,
+                    noise_scheduler=noise_scheduler,
+                    observations=cfg.model.obs_horizon,
+                    device=cfg.device,
+                    network_params=params,
+                    normalization_stats=demonstration_statistics,
+                    successes=successes,
+                )
+            eval_results["policy_refinement"] = p + 1
+            log_eval_info(logger, eval_results, step, cfg)
+            if cfg.wandb.enable:
+                logger.log_image(
+                    eval_results["last_goal"],
+                    "goal_conditioning",
+                    step,
+                    mode="eval",
+                )
+                logger.log_video(
+                    str(eval_results["video_path"]), step, mode="eval"
+                )
+
+        if cfg.evaluation.intermediate_goals:
+            logging.info("Evaluating Intermediate Goals.")
+            env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
+            # Get a random goal
+            goal_idx = random.randint(0, len(block_poses) - 1)
+            block_pose_eval = block_poses[goal_idx]
+            target = trajectory["reached_goals"][goal_idx]
+            # Inference
+            with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
+                eval_interm_results = eval_policy_on_interm_goals(
+                    env=env,
+                    num_episodes=10,
+                    max_steps=200,
+                    save_video=True,
+                    video_path="video/pusht/intermediate_goals",
+                    video_prefix="pusht_policy_refinement_" + str(p),
+                    seed=cfg.seed + 1,
+                    model=ema_nets,
+                    noise_scheduler=noise_scheduler,
+                    observations=cfg.model.obs_horizon,
+                    device=cfg.device,
+                    network_params=params,
+                    normalization_stats=demonstration_statistics,
+                    target=target,
+                    target_block_pose=block_pose_eval,
+                )
+            eval_interm_results["policy_refinement"] = p + 1
+            log_eval_info(logger, eval_interm_results, step, cfg)
+            if cfg.wandb.enable:
+                logger.log_image(
+                    eval_interm_results["last_goal"],
+                    "goal_conditioning",
+                    step,
+                    mode="eval",
+                )
+                logger.log_video(
+                    str(eval_interm_results["rollout_video"]),
+                    step,
+                    mode="eval",
+                )
 
 
 @hydra.main(version_base="1.2", config_path="../config", config_name="config")
