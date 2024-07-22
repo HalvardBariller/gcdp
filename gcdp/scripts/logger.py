@@ -137,7 +137,7 @@ class Logger:
             self._wandb = wandb
 
     def log_dict(self, d, step, mode="train"):
-        assert mode in {"train", "eval"}
+        assert mode in {"train", "eval", "interm"}
         # TODO(alexander-soare): Add local text log.
         if self._wandb is not None:
             for k, v in d.items():
@@ -152,7 +152,7 @@ class Logger:
         assert mode in {"train", "eval", "interm"}
         assert self._wandb is not None
         wandb_video = self._wandb.Video(
-            video_path, fps=self._cfg.fps, format="mp4"
+            video_path, fps=self._cfg.env.fps, format="mp4"
         )
         self._wandb.log({f"{mode}/video": wandb_video}, step=step)
 
@@ -283,7 +283,7 @@ def log_train_info(logger: Logger, info, step, cfg):
     logger.log_dict(info, step, mode="train")
 
 
-def log_eval_info(logger: Logger, info, step, cfg):
+def log_eval_info(logger: Logger, info, step, cfg, mode="eval"):
     """Log evaluation information."""
     success_rate = info["success_rate"]
     average_reward = info["average_reward"]
@@ -298,4 +298,4 @@ def log_eval_info(logger: Logger, info, step, cfg):
     ]
     logging.info(" | ".join(log_items))
     info = {k: v for k, v in info.items() if isinstance(v, (int, float, str))}
-    logger.log_dict(info, step, mode="eval")
+    logger.log_dict(info, step, mode=mode)

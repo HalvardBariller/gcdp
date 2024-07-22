@@ -19,7 +19,9 @@ from gcdp.model.policy import diff_policy
 from gcdp.scripts.utils import ScaleRewardWrapper, normalize_data
 
 
-def get_random_rollout(episode_length=50, env=None, get_block_poses=False):
+def get_random_rollout(
+    episode_length: int, env: gym.Env, get_block_poses: bool
+):
     """
     Simulate an episode of the environment using the given policy.
 
@@ -82,7 +84,8 @@ def get_guided_rollout(
     network_params: dict,
     normalization_stats: dict,
     noise_scheduler: DDPMScheduler | DDIMScheduler,
-    get_block_poses: bool = False,
+    get_block_poses: bool,
+    successes: list,
 ):
     """
     Simulate an episode of the environment using the given policy.
@@ -96,6 +99,7 @@ def get_guided_rollout(
         network_params: the parameters of the network
         normalization_stats: the statistics used to normalize the data
         get_block_poses : whether to return the block poses (used for evaluation on intermediary goals)
+        successes: list of successful goals
     Outputs:
         dict containing the following
             states : list of states (dicts) of the agent
@@ -104,14 +108,9 @@ def get_guided_rollout(
             desired_goal : the goal that the agent was trying to reach
         list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
     """
-    if env is None:
-        env = gym.make(
-            "gym_pusht/PushT-v0",
-            obs_type="pixels_agent_pos",
-            render_mode="rgb_array",
-        )
-        env = ScaleRewardWrapper(env)
-    desired_goal, _ = env.reset()  # Reset is random
+    # desired_goal, _ = env.reset()  # Reset is random
+    len_successes = len(successes)
+    desired_goal = successes[np.random.randint(len_successes)]
     s, _ = env.reset()
     states = []
     actions = []
@@ -120,25 +119,32 @@ def get_guided_rollout(
         [s] * network_params["obs_horizon"],
         maxlen=network_params["obs_horizon"],
     )
+    action_queue = collections.deque(maxlen=network_params["action_horizon"])
     block_poses = []
-    for _ in range(episode_length):
-        action = diff_policy(
-            model=model,
-            noise_scheduler=noise_scheduler,
-            observations=observations,
-            goal=desired_goal,
-            device=device,
-            network_params=network_params,
-            normalization_stats=normalization_stats,
-        )
-        if action.shape != (2,):
-            action = action[0]
-        states.append(s)
-        observations.append(s)
-        actions.append(action)
-        s, _, _, _, infos = env.step(action)
-        reached_goals.append(s)
-        block_poses.append(infos["block_pose"])
+    # for _ in range(episode_length):
+    while len(states) < episode_length:
+        # if action.shape != (2,):
+        #     action = action[0]
+        if action_queue:
+            action = action_queue.popleft()
+            states.append(s)
+            observations.append(s)
+            actions.append(action)
+            s, _, _, _, infos = env.step(action)
+            reached_goals.append(s)
+            block_poses.append(infos["block_pose"])
+        else:
+            action_chunk = diff_policy(
+                model=model,
+                noise_scheduler=noise_scheduler,
+                observations=observations,
+                goal=desired_goal,
+                device=device,
+                network_params=network_params,
+                normalization_stats=normalization_stats,
+                actions_taken=network_params["action_horizon"],
+            )
+            action_queue.extend(action_chunk)
 
     if get_block_poses:
         return {

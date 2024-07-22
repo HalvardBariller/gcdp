@@ -16,7 +16,7 @@ def diff_policy(
     device: torch.device,
     network_params: dict,
     normalization_stats: dict,
-    actions_taken: int = 1,
+    actions_taken: int,
 ):
     """
     Predict a sequence of actions to take to reach the goal considering past observations.
