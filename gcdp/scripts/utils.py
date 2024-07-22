@@ -1,6 +1,10 @@
 """This module contains utility functions for the GCDP project."""
 
+import os
+from os import open
+import pickle
 import gymnasium as gym
+import gym_pusht
 import numpy as np
 import random
 import torch
@@ -81,6 +85,16 @@ class ScaleRewardWrapper(gym.RewardWrapper):
         return (next_state, reward, term, trunc, info)
 
 
+def pusht_init_env(sparse_reward=True):
+    """Initialize the environment for the PUSHT task."""
+    env = gym.make(
+        "gym_pusht/PushT-v0",
+        obs_type="pixels_agent_pos",
+        render_mode="rgb_array",
+    )
+    return env if not sparse_reward else ScaleRewardWrapper(env)
+
+
 # normalize data
 def get_data_stats(data):
     """Get the min and max values of the data."""
@@ -118,3 +132,25 @@ def set_global_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def get_demonstration_statistics():
+    """Load the statistics of the demonstrations."""
+    demonstration = np.load(
+        "objects/demonstration_statistics.npz",
+        allow_pickle=True,
+    )
+    demonstration_statistics = {
+        key: demonstration[key].item() for key in demonstration
+    }
+    demonstration.close()
+    return demonstration_statistics
+
+
+# DOES NOT WORK WITH HYDRA
+# def get_demonstration_successes(file_path):
+#     with open(file_path, "rb") as f:
+#         successes = pickle.load(f)
+#     for item in successes:
+#         item["pixels"] = item["pixels"].astype(np.float64)
+#     return successes

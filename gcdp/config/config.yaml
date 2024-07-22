@@ -1,0 +1,74 @@
+hydra:
+  run:
+    dir: runs/outputs/train/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}
+  job:
+    name: default
+
+device: cuda
+use_amp: false
+resume: false
+seed: 1000
+
+env:
+  task: pusht
+  sparse_reward: true
+  agent_pos_dim: 2
+  fps: 10
+
+
+data_generation:
+  episode_length: 200
+  num_episodes: 50
+  get_block_poses: true
+  enrich_data: false
+  get_original_goal: false
+
+
+training:
+  policy_refinement: 20
+  num_epochs: 10
+  batch_size: 128
+  num_workers: 4
+  log_interval: 20
+
+optim:
+  name: adam
+  lr: 1e-4
+  betas: [0.95, 0.999]
+  eps: 1e-8
+  weight_decay: 1e-6
+  grad_clip_norm: 10.0
+  scheduler:
+    name: cosine
+    num_warmup_steps: 500
+
+model:
+  vision_encoder:
+    name: "resnet18"
+    feature_dim: 512
+  obs_horizon: 2
+  pred_horizon: 16
+  action_horizon: 8
+  action_dim: 2
+
+diffusion:
+  scheduler: "DDIM"
+  num_diffusion_iters_train: 50
+  num_diffusion_iters_eval: 5
+  beta_schedule: "squaredcos_cap_v2"
+  clip_sample: true
+  prediction_type: "epsilon"
+
+save_model: false
+
+evaluation:
+  eval: true
+  intermediate_goals: true
+  num_episodes: 10
+  max_steps: 200
+  save_video: true
+
+wandb:
+  enable: true
+  disable_artifact: true
+  project: GCDP
