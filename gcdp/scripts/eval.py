@@ -114,10 +114,9 @@ def eval_policy(
                 done = True
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
-        episode_results["sum_rewards"] = sum(episode_results["rewards"])
 
     env.close()
-
+    episode_results["sum_rewards"] = sum(episode_results["rewards"])
     episode_results["success_rate"] = (
         sum(episode_results["success"]) / num_episodes
     )
@@ -263,8 +262,6 @@ def eval_policy_on_interm_goals(
         task_completed = False
         # Keep track of the planned actions
         action_queue = collections.deque(maxlen=actions_taken)
-        # Randomly select a goal among the successful ones
-        # goal = successes[np.random.randint(len_successes)]
         # Initialize the environment
         s, _ = env.reset(seed=seed)
         done = False
@@ -277,8 +274,9 @@ def eval_policy_on_interm_goals(
                 s, _, _, _, inf = env.step(action_queue.popleft())
                 step += 1
                 info_poses["block_pose"] = inf["block_pose"]
-                tot_reward += compute_coverage(info_poses)
-                done = tot_reward > 0.9
+                reward = compute_coverage(info_poses)
+                tot_reward += reward
+                done = reward > 0.9
                 if done:
                     task_completed = True
             # Plan new actions
@@ -300,10 +298,9 @@ def eval_policy_on_interm_goals(
                 done = True
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
-        episode_results["sum_rewards"] = sum(episode_results["rewards"])
 
     env.close()
-
+    episode_results["sum_rewards"] = sum(episode_results["rewards"])
     episode_results["success_rate"] = (
         sum(episode_results["success"]) / num_episodes
     )

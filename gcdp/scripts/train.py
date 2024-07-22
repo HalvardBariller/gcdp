@@ -248,7 +248,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 pin_memory=True,
             )
             optimizer, lr_scheduler = make_optimizer_and_scheduler(
-                cfg, nets, len(dataset)
+                cfg, nets, num_batches=len(dataloader)
             )
             logging.info(f"Number of training examples: {len(dataset)}")
         # Rollout with refined policy
