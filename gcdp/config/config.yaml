@@ -17,10 +17,10 @@ env:
 
 
 data_generation:
-  episode_length: 200
+  episode_length: 50
   num_episodes: 50
   get_block_poses: true
-  enrich_data: false
+  enrich_data: true
   get_original_goal: false
 
 
