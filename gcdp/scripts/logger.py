@@ -193,9 +193,9 @@ class Logger:
         if caption is None:
             caption = file_name
 
-        # if self._wandb is not None:
-        #     wandb_image = self._wandb.Image(str(file_path), caption=caption)
-        #     self._wandb.log({f"{mode}/{caption}": wandb_image}, step=step)
+        if self._wandb is not None:
+            wandb_image = self._wandb.Image(str(file_path), caption=caption)
+            self._wandb.log({f"{file_name}": wandb_image})
 
     # @classmethod
     # def get_checkpoints_dir(cls, log_dir: str | Path) -> Path:

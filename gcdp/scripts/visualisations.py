@@ -36,7 +36,6 @@ def goal_map_visualisation(
     ax0.set_ylim([680, 0])
     ax0.set_aspect("equal")
     ax0.set_title("Behavioral goal used for rollout generation")
-
     num_goals = len(achieved_goals)
     colors = [
         (i / num_goals, 0, 1.0 - i / num_goals) for i in range(num_goals)
