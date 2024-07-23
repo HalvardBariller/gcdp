@@ -22,6 +22,7 @@ data_generation:
   get_block_poses: true
   enrich_data: true
   get_original_goal: false
+  conditioning: "achieved_goal"
 
 
 training:

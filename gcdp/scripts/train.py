@@ -257,18 +257,41 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             if cfg.data_generation.get_block_poses:
                 trajectories = []
                 for _ in range(cfg.data_generation.num_episodes):
-                    trajectory, block_poses = get_guided_rollout(
-                        episode_length=cfg.data_generation.episode_length,
-                        env=env,
-                        model=ema_nets,
-                        device=cfg.device,
-                        network_params=params,
-                        normalization_stats=demonstration_statistics,
-                        noise_scheduler=noise_scheduler,
-                        get_block_poses=True,
-                        successes=successes,
-                    )
-                    trajectories.append(trajectory)
+                    if cfg.data_generation.conditioning == "behavioral_goal":
+                        # Use end goals for conditioning
+                        trajectory, block_poses = get_guided_rollout(
+                            episode_length=cfg.data_generation.episode_length,
+                            env=env,
+                            model=ema_nets,
+                            device=cfg.device,
+                            network_params=params,
+                            normalization_stats=demonstration_statistics,
+                            noise_scheduler=noise_scheduler,
+                            get_block_poses=True,
+                            conditioning_samples=successes,
+                        )
+                        trajectories.append(trajectory)
+                    elif cfg.data_generation.conditioning == "achieved_goal":
+                        # Use intermediate goals for conditioning
+                        goal_idx = random.randint(0, len(block_poses) - 1)
+                        block_pose_eval = block_poses[goal_idx]
+                        target = trajectory["reached_goals"][goal_idx]
+                        trajectory, block_poses = get_guided_rollout(
+                            episode_length=cfg.data_generation.episode_length,
+                            env=env,
+                            model=ema_nets,
+                            device=cfg.device,
+                            network_params=params,
+                            normalization_stats=demonstration_statistics,
+                            noise_scheduler=noise_scheduler,
+                            get_block_poses=True,
+                            conditioning_samples=[target],
+                        )
+                        trajectories.append(trajectory)
+                    else:
+                        raise ValueError(
+                            "Conditioning for generation must be either 'behavioral_goal' or 'achieved_goal'."
+                        )
             else:
                 trajectories = [
                     get_guided_rollout(

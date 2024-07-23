@@ -85,7 +85,7 @@ def get_guided_rollout(
     normalization_stats: dict,
     noise_scheduler: DDPMScheduler | DDIMScheduler,
     get_block_poses: bool,
-    successes: list,
+    conditioning_samples: list,
 ):
     """
     Simulate an episode of the environment using the given policy.
@@ -99,7 +99,7 @@ def get_guided_rollout(
         network_params: the parameters of the network
         normalization_stats: the statistics used to normalize the data
         get_block_poses : whether to return the block poses (used for evaluation on intermediary goals)
-        successes: list of successful goals
+        conditioning_samples: list of behavioral goals
     Outputs:
         dict containing the following
             states : list of states (dicts) of the agent
@@ -109,8 +109,8 @@ def get_guided_rollout(
         list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
     """
     # desired_goal, _ = env.reset()  # Reset is random
-    len_successes = len(successes)
-    desired_goal = successes[np.random.randint(len_successes)]
+    len_successes = len(conditioning_samples)
+    desired_goal = conditioning_samples[np.random.randint(len_successes)]
     s, _ = env.reset()
     states = []
     actions = []

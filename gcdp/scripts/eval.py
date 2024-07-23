@@ -141,6 +141,11 @@ def compute_coverage(info):
 
     Parameters:
         info (dict): Dictionary containing the block and goal pose information.
+        Example:
+        {
+            "block_pose": np.ndarray([x, y, theta]),
+            "goal_pose": np.ndarray([x, y, theta]),
+        }
     Returns:
         float: The coverage of the block over the goal area.
     """
@@ -248,7 +253,8 @@ def eval_policy_on_interm_goals(
 
     episode_results = {
         "success": [],
-        "rewards": [],
+        "total_reward": [],
+        "minimal_distance": [],
     }
 
     info_poses = {"goal_pose": target_block_pose}
@@ -269,14 +275,21 @@ def eval_policy_on_interm_goals(
         observations = collections.deque([s] * obs_horizon, maxlen=obs_horizon)
         step = 0
         while not done:
+            coverages = []
+            distances = []
             # Execute the planned actions
             if action_queue:
                 s, _, _, _, inf = env.step(action_queue.popleft())
                 step += 1
                 info_poses["block_pose"] = inf["block_pose"]
-                reward = compute_coverage(info_poses)
-                tot_reward += reward
-                done = reward > 0.9
+                coverage = compute_coverage(info_poses)
+                l2_norm = np.linalg.norm(
+                    info_poses["block_pose"] - info_poses["goal_pose"]
+                )
+                tot_reward += coverage
+                done = coverage > 0.9
+                coverages.append(coverage)
+                distances.append(l2_norm)
                 if done:
                     task_completed = True
             # Plan new actions
@@ -297,15 +310,19 @@ def eval_policy_on_interm_goals(
             if step > max_steps:
                 done = True
         episode_results["success"].append(task_completed)
-        episode_results["rewards"].append(tot_reward)
+        episode_results["total_reward"].append(tot_reward)
+        episode_results["minimal_distance"].append(min(distances))
 
     env.close()
-    episode_results["sum_rewards"] = sum(episode_results["rewards"])
+    episode_results["sum_rewards"] = sum(episode_results["total_reward"])
     episode_results["success_rate"] = (
         sum(episode_results["success"]) / num_episodes
     )
     episode_results["average_reward"] = (
-        sum(episode_results["rewards"]) / num_episodes
+        sum(episode_results["total_reward"]) / num_episodes
+    )
+    episode_results["average_minimal_distance"] = (
+        sum(episode_results["minimal_distance"]) / num_episodes
     )
     episode_results["last_goal"] = target["pixels"]
 

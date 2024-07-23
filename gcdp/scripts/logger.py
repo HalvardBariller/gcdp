@@ -296,6 +296,11 @@ def log_eval_info(logger: Logger, info, step, cfg, mode="eval"):
         f"Average Reward: {average_reward:.3f}",
         f"∑Rewards: {sum_rewards:.3f}",
     ]
+    if mode == "interm":
+        average_minimal_distance = info["average_minimal_distance"]
+        log_items.append(
+            f"Average Minimal Distance: {average_minimal_distance:.3f}"
+        )
     logging.info(" | ".join(log_items))
     info = {k: v for k, v in info.items() if isinstance(v, (int, float, str))}
     logger.log_dict(info, step, mode=mode)
