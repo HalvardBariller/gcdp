@@ -109,8 +109,9 @@ def get_guided_rollout(
         list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
     """
     # desired_goal, _ = env.reset()  # Reset is random
-    len_successes = len(conditioning_samples)
-    desired_goal = conditioning_samples[np.random.randint(len_successes)]
+    # len_successes = len(conditioning_samples)
+    # desired_goal = conditioning_samples[np.random.randint(len_successes)]
+    desired_goal = conditioning_samples
     s, _ = env.reset()
     states = []
     actions = []

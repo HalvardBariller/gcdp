@@ -5,6 +5,7 @@
 
 from pathlib import Path
 import logging
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 import os
 from termcolor import colored
@@ -161,6 +162,40 @@ class Logger:
         assert self._wandb is not None
         wandb_image = self._wandb.Image(image, caption=caption)
         self._wandb.log({f"{mode}/{caption}": wandb_image}, step=step)
+
+    def log_figure(
+        self,
+        fig,
+        task: str,
+        file_name: str,
+        step: int,
+        mode: str = "map",
+        caption: str = None,
+    ):
+        """
+        Save and log a matplotlib figure.
+
+        Args:
+            fig: The matplotlib figure to save and log.
+            task: The task for which the figure was generated.
+            file_name: The name of the file to save the figure as.
+            caption: The caption for the logged image.
+            step: The current step of the training or evaluation process.
+            mode: The mode of logging
+        """
+        assert mode in {"train", "eval", "interm", "map"}
+        task_dir = self.log_dir / task
+        task_dir.mkdir(parents=True, exist_ok=True)
+        file_path = task_dir / file_name
+        fig.savefig(file_path)
+        plt.close(fig)
+
+        if caption is None:
+            caption = file_name
+
+        # if self._wandb is not None:
+        #     wandb_image = self._wandb.Image(str(file_path), caption=caption)
+        #     self._wandb.log({f"{mode}/{caption}": wandb_image}, step=step)
 
     # @classmethod
     # def get_checkpoints_dir(cls, log_dir: str | Path) -> Path:

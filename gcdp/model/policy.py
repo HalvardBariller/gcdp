@@ -78,9 +78,10 @@ def diff_policy(
         obs_features = torch.cat(
             [image_features, agent_poses], dim=-1
         )  # (2, 514)
-        goal_features = torch.cat(
-            [goal_image_features, goal_agent], dim=-1
-        )  # (1, 514)
+        # goal_features = torch.cat(
+        #     [goal_image_features, goal_agent], dim=-1
+        # )  # (1, 514)
+        goal_features = goal_image_features  # (1, 512)
 
         # reshape observation to (B,obs_horizon*obs_dim)
         obs_cond = obs_features.unsqueeze(0).flatten(start_dim=1)  # (1, 1028)

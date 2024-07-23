@@ -2,6 +2,8 @@
 
 import warnings
 
+from gcdp.scripts.visualisations import goal_map_visualisation
+
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -132,13 +134,17 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
         start_dim=1
     )  # (B, obs_horizon * obs_dim) = (64, 1028)
 
-    # concatenate vision goal feature and low-dim obs
-    reached_obs_features = torch.cat(
-        [reached_image_features, nreachedagent_pos], dim=-1
-    )  # (B, 1, obs_dim) = (64, 1, 514)
-    reached_obs_cond = reached_obs_features.flatten(
+    # # concatenate vision goal feature and low-dim obs
+    # reached_obs_features = torch.cat(
+    #     [reached_image_features, nreachedagent_pos], dim=-1
+    # )  # (B, 1, obs_dim) = (64, 1, 514)
+    # reached_obs_cond = reached_obs_features.flatten(
+    #     start_dim=1
+    # )  # (B, obs_dim) = (64, 514)
+    # KEEP ONLY CONDITIONING ON IMAGE
+    reached_obs_cond = reached_image_features.flatten(
         start_dim=1
-    )  # (B, obs_dim) = (64, 514)
+    )  # (B, goal_dim) = (64, 512)
 
     # concatenate obs and goal
     full_cond = torch.cat([obs_cond, reached_obs_cond], dim=-1)
@@ -256,41 +262,46 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             logging.info("Generating Rollouts with Refined Policy.")
             if cfg.data_generation.get_block_poses:
                 trajectories = []
-                for _ in range(cfg.data_generation.num_episodes):
-                    if cfg.data_generation.conditioning == "behavioral_goal":
-                        # Use end goals for conditioning
-                        trajectory, block_poses = get_guided_rollout(
-                            episode_length=cfg.data_generation.episode_length,
-                            env=env,
-                            model=ema_nets,
-                            device=cfg.device,
-                            network_params=params,
-                            normalization_stats=demonstration_statistics,
-                            noise_scheduler=noise_scheduler,
-                            get_block_poses=True,
-                            conditioning_samples=successes,
+                if cfg.data_generation.conditioning == "end_goal":
+                    # Use end goal as behavioral goal
+                    conditioning_sample = successes[
+                        np.random.randint(len(successes))
+                    ]
+                elif cfg.data_generation.conditioning == "achieved_goal":
+                    # Use achieved goal as behavioral goal
+                    goal_idx = random.randint(0, len(block_poses) - 1)
+                    block_pose_eval = block_poses[goal_idx]
+                    conditioning_sample = trajectory["reached_goals"][goal_idx]
+                else:
+                    raise ValueError(
+                        "Conditioning for generation must be either 'end_goal' or 'achieved_goal'."
+                    )
+                for e in range(cfg.data_generation.num_episodes):
+                    trajectory, block_poses = get_guided_rollout(
+                        episode_length=cfg.data_generation.episode_length,
+                        env=env,
+                        model=ema_nets,
+                        device=cfg.device,
+                        network_params=params,
+                        normalization_stats=demonstration_statistics,
+                        noise_scheduler=noise_scheduler,
+                        get_block_poses=True,
+                        conditioning_samples=conditioning_sample,
+                    )
+                    trajectories.append(trajectory)
+                    if cfg.data_generation.goal_map_vis:
+                        figure, fig_name = goal_map_visualisation(
+                            goal_pose=block_pose_eval,
+                            achieved_goals=block_poses,
+                            num_refinement=p,
+                            num_rollout=e,
                         )
-                        trajectories.append(trajectory)
-                    elif cfg.data_generation.conditioning == "achieved_goal":
-                        # Use intermediate goals for conditioning
-                        goal_idx = random.randint(0, len(block_poses) - 1)
-                        block_pose_eval = block_poses[goal_idx]
-                        target = trajectory["reached_goals"][goal_idx]
-                        trajectory, block_poses = get_guided_rollout(
-                            episode_length=cfg.data_generation.episode_length,
-                            env=env,
-                            model=ema_nets,
-                            device=cfg.device,
-                            network_params=params,
-                            normalization_stats=demonstration_statistics,
-                            noise_scheduler=noise_scheduler,
-                            get_block_poses=True,
-                            conditioning_samples=[target],
-                        )
-                        trajectories.append(trajectory)
-                    else:
-                        raise ValueError(
-                            "Conditioning for generation must be either 'behavioral_goal' or 'achieved_goal'."
+                        logger.log_figure(
+                            figure,
+                            task=f"goal_map_visualisation/refinement{p}",
+                            file_name=fig_name,
+                            step=p,
+                            mode="map",
                         )
             else:
                 trajectories = [
