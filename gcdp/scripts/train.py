@@ -2,8 +2,6 @@
 
 import warnings
 
-from gcdp.scripts.visualisations import goal_map_visualisation
-
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -47,6 +45,10 @@ from gcdp.scripts.logger import (
     log_eval_info,
     log_output_dir,
     log_train_info,
+)
+from gcdp.scripts.visualisations import (
+    aggregated_goal_map_visualisation,
+    goal_map_visualisation,
 )
 from gcdp.scripts.utils import (
     get_demonstration_statistics,
@@ -220,6 +222,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
     logging.info("Training Diffusion Model.")
     params = build_params(cfg)
     step = 0
+    if cfg.data_generation.goal_map_vis == "aggregated":
+        # Track the goals used/obtained during rollouts for visualisation
+        behavioral_achieved_goals = []
     for p in range(cfg.training.policy_refinement):
         logging.info(
             f"Policy Refinement {p + 1}/{cfg.training.policy_refinement}"
@@ -289,7 +294,26 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         conditioning_samples=conditioning_sample,
                     )
                     trajectories.append(trajectory)
-                    if cfg.data_generation.goal_map_vis:
+                    if cfg.data_generation.goal_map_vis == "aggregated":
+                        rollout_goals = {
+                            "behavioral_goal": block_pose_eval,
+                            "achieved_goals": block_poses,
+                        }
+                        behavioral_achieved_goals.append(rollout_goals)
+                        figure, fig_name = aggregated_goal_map_visualisation(
+                            behavioral_achieved_goals
+                        )
+                        logger.log_figure(
+                            figure,
+                            task="aggregated_goal_map_visualisation",
+                            file_name=fig_name,
+                            step=p + 1,
+                            mode="map",
+                        )
+                    elif (
+                        cfg.data_generation.goal_map_vis
+                        == "individual_rollout"
+                    ):
                         figure, fig_name = goal_map_visualisation(
                             goal_pose=block_pose_eval,
                             achieved_goals=block_poses,
@@ -471,5 +495,18 @@ def train_cli(cfg: DictConfig) -> None:
     )
 
 
+@hydra.main(
+    version_base="1.2", config_path="../config", config_name="config_debug"
+)
+def train_debug(cfg: DictConfig) -> None:
+    """Training from a configuration file."""
+    training_config(
+        cfg,
+        out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
+        job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
+    )
+
+
 if __name__ == "__main__":
-    train_cli()
+    # train_cli()
+    train_debug()

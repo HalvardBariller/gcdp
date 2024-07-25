@@ -18,23 +18,17 @@ env:
 
 data_generation:
   episode_length: 100
-  num_episodes: 10
+  num_episodes: 1
   get_block_poses: true
   enrich_data: true
   get_original_goal: false
   conditioning: "achieved_goal"
   goal_map_vis: aggregated
-  expert_data: false
-
-  delta_timestamps:
-    observation.image: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
-    observation.state: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
-    action: "[i / ${fps} for i in range(1 - ${model.obs_horizon}, 1 - ${model.obs_horizon} + ${model.pred_horizon})]"
 
 
 training:
   policy_refinement: 20
-  num_epochs: 10
+  num_epochs: 1
   batch_size: 128
   num_workers: 4
   log_interval: 20
@@ -70,8 +64,8 @@ diffusion:
 save_model: false
 
 evaluation:
-  eval: true
-  intermediate_goals: true
+  eval: false
+  intermediate_goals: false
   num_episodes: 10
   max_steps: 200
   save_video: true
