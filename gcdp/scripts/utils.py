@@ -104,7 +104,12 @@ def get_data_stats(data):
 
 
 def normalize_data(data, stats):
-    """Normalize the data to [-1, 1]."""
+    """Normalize the data to [-1, 1].
+
+    Args:
+        data: the data to normalize (transformed to np array if not already)
+        stats: the statistics of the data
+    """
     # Convert entries to np arrays
     if not isinstance(data, np.ndarray):
         data = np.array(data)
