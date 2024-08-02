@@ -26,7 +26,9 @@ def make_diffusion_model(cfg: DictConfig):
     # TODO: TEST WITHOUT INTEGRATING AGENT IN GOAL
     goal_dim = vision_feature_dim
     noise_pred_net = ConditionalUnet1D(
-        input_dim=action_dim, global_cond_dim=obs_dim * obs_horizon + goal_dim
+        input_dim=action_dim,
+        global_cond_dim=obs_dim * obs_horizon + goal_dim,
+        # input_dim=action_dim, global_cond_dim=obs_dim * obs_horizon
     )
     nets = nn.ModuleDict(
         {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
@@ -35,15 +37,21 @@ def make_diffusion_model(cfg: DictConfig):
     if cfg.diffusion.scheduler == "DDIM":
         noise_scheduler = DDIMScheduler(
             num_train_timesteps=cfg.diffusion.num_diffusion_iters_train,
+            beta_start=cfg.diffusion.beta_start,
+            beta_end=cfg.diffusion.beta_end,
             beta_schedule=cfg.diffusion.beta_schedule,
             clip_sample=cfg.diffusion.clip_sample,
+            clip_sample_range=cfg.diffusion.clip_sample_range,
             prediction_type=cfg.diffusion.prediction_type,
         )
     elif cfg.diffusion.scheduler == "DDPM":
         noise_scheduler = DDPMScheduler(
             num_train_timesteps=cfg.diffusion.num_diffusion_iters_train,
+            beta_start=cfg.diffusion.beta_start,
+            beta_end=cfg.diffusion.beta_end,
             beta_schedule=cfg.diffusion.beta_schedule,
             clip_sample=cfg.diffusion.clip_sample,
+            clip_sample_range=cfg.diffusion.clip_sample_range,
             prediction_type=cfg.diffusion.prediction_type,
         )
     device = cfg.device

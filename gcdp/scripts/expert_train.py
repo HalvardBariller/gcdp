@@ -33,6 +33,7 @@ import tqdm
 from diffusers.optimization import get_scheduler
 from omegaconf import DictConfig
 from torch.cuda.amp import GradScaler
+from torch.utils.data import DataLoader
 
 
 from gcdp.model.modeling import (
@@ -104,65 +105,45 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
     obs_horizon = params["obs_horizon"]
     pred_horizon = params["pred_horizon"]
     device = cfg.device
-    nimage = nbatch["image"][:, :obs_horizon].to(
+    nimage = nbatch["observation.image"].to(
         device
-    )  # (B, obs_horizon, C, H, W) = (64, 2, 3, 96, 96)
-    nagent_pos = nbatch["agent_pos"][:, :obs_horizon].to(
+    )  # (B, obs_horizon, C, H, W)
+    nagent_pos = nbatch["observation.state"].to(
         device
-    )  # (B, obs_horizon, 2) = (64, 2, 2)
-    naction = nbatch["action"].to(device)  # (B, pred_horizon, 2) = (64, 16, 2)
-    nreachedimage = nbatch["reached_goal_image"].to(
-        device
-    )  # (B, C, H, W) = (64, 3, 96, 96)
-    nreachedagent_pos = nbatch["reached_goal_agent_pos"].to(
-        device
-    )  # (B, 2) = (64, 2)
-    nreachedagent_pos = nreachedagent_pos.unsqueeze(
-        1
-    )  # (B, 1, 2) = (64, 1, 2)
+    )  # (B, obs_horizon, obs_dim)
+    naction = nbatch["action"].to(device)  # (B, pred_horizon, action_dim)
+    nreachedimage = nbatch["reached_goal.image"].to(device)  # (B, C, H, W)
+    nreachedagent_pos = (
+        nbatch["reached_goal.state"].to(device).unsqueeze(1)
+    )  # (B, obs_dim) --> (B, 1, obs_dim)
+
     B = nagent_pos.shape[0]
     image_features = nets["vision_encoder"](nimage.flatten(end_dim=1))
-    # (B*obs_horizon, C, H, W) = (128, 3, 96, 96) --> (128, 512)
+    # (B * obs_horizon, C, H, W) --> (B * obs_horizon, D)
     image_features = image_features.reshape(
         *nimage.shape[:2], -1
-    )  # (B, obs_horizon, D) = (64, 2, 512)
-
+    )  # (B, obs_horizon, D)
     reached_image_features = nets["vision_encoder"](
         nreachedimage
-    )  # (B, C, H, W) = (64, 3, 96, 96) --> (64, 512)
-    reached_image_features = reached_image_features.unsqueeze(
-        1
-    )  # (B, 1, D) = (64, 1, 512)
+    )  # (B, C, H, W) --> (B, D)
+    reached_image_features = reached_image_features.unsqueeze(1)  # (B, 1, D)
 
     # concatenate vision feature and low-dim obs
     obs_features = torch.cat(
         [image_features, nagent_pos], dim=-1
-    )  # (B, obs_horizon, obs_dim) = (64, 2, 514)
+    )  # (B, obs_horizon, D + obs_dim)
     obs_cond = obs_features.flatten(
         start_dim=1
-    )  # (B, obs_horizon * obs_dim) = (64, 1028)
-
-    # # concatenate vision goal feature and low-dim obs
-    # reached_obs_features = torch.cat(
-    #     [reached_image_features, nreachedagent_pos], dim=-1
-    # )  # (B, 1, obs_dim) = (64, 1, 514)
-    # reached_obs_cond = reached_obs_features.flatten(
-    #     start_dim=1
-    # )  # (B, obs_dim) = (64, 514)
-    # KEEP ONLY CONDITIONING ON IMAGE
-    reached_obs_cond = reached_image_features.flatten(
-        start_dim=1
-    )  # (B, goal_dim) = (64, 512)
-
+    )  # (B, obs_horizon * (D + obs_dim))
+    reached_goal_cond = reached_image_features.flatten(start_dim=1)  # (B, D)
     # concatenate obs and goal
-    full_cond = torch.cat([obs_cond, reached_obs_cond], dim=-1)
-    # (B, obs_horizon * obs_dim + goal_dim)  = (64, 1542)
-    # Convert to float32
+    full_cond = torch.cat(
+        [obs_cond, reached_goal_cond], dim=-1
+    )  # (B, obs_horizon * (D + obs_dim) + D)
     full_cond = full_cond.float()
 
     # sample noise to add to actions
     noise = torch.randn(naction.shape, device=device)
-
     # sample a diffusion iteration for each data point
     timesteps = torch.randint(
         0,
@@ -170,18 +151,15 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
         (B,),
         device=device,
     ).long()
-
     # add noise to clean images according to noise magnitude
     # at each diffusion iteration (forward diffusion process)
     noisy_actions = noise_scheduler.add_noise(naction, noise, timesteps)
-
     # predict the noise residual
     noise_pred = nets["noise_pred_net"](
         noisy_actions, timesteps, global_cond=full_cond
     )
-
-    loss = nn.functional.mse_loss(noise_pred, noise)
-    return loss
+    loss = nn.functional.mse_loss(noise_pred, noise, reduction="none")
+    return loss.mean()
 
 
 def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
@@ -236,108 +214,112 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         # Initial random rollout
         if p == 0:
             dataset = build_expert_dataset(
-                cfg, expert_dataset, cfg.data_generation.num_episodes, 32
+                # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
+                cfg,
+                expert_dataset,
+                20,
+                32,
             )
-            logging.info(f"Number of training examples: {len(dataset)}")
-            dataloader = torch.utils.data.DataLoader(
+            logging.info(
+                f"Number of training examples: {len(dataset)}"
+            )  # 24,208?
+            dataloader = DataLoader(
                 dataset,
                 batch_size=cfg.training.batch_size,
                 shuffle=True,
                 num_workers=cfg.training.num_workers,
                 pin_memory=True,
             )
-            for batch in dataloader:
-                batch = batch_normalize_expert_input(
-                    batch, demonstration_statistics
-                )
             optimizer, lr_scheduler = make_optimizer_and_scheduler(
                 cfg, nets, num_batches=len(dataloader)
             )
         # Rollout with refined policy
-        else:
-            logging.info("Generating Rollouts with Refined Policy.")
-            # if cfg.data_generation.get_block_poses:
-            #     trajectories = []
-            #     if cfg.data_generation.conditioning == "end_goal":
-            #         # Use end goal as behavioral goal
-            #         conditioning_sample = successes[
-            #             np.random.randint(len(successes))
-            #         ]
-            #     elif cfg.data_generation.conditioning == "achieved_goal":
-            #         # Use achieved goal as behavioral goal
-            #         goal_idx = random.randint(0, len(block_poses) - 1)
-            #         block_pose_eval = block_poses[goal_idx]
-            #         conditioning_sample = trajectory["reached_goals"][goal_idx]
-            #     else:
-            #         raise ValueError(
-            #             "Conditioning for generation must be either 'end_goal' or 'achieved_goal'."
-            #         )
-            #     for e in range(cfg.data_generation.num_episodes):
-            #         trajectory, block_poses = get_guided_rollout(
-            #             episode_length=cfg.data_generation.episode_length,
-            #             env=env,
-            #             model=ema_nets,
-            #             device=cfg.device,
-            #             network_params=params,
-            #             normalization_stats=demonstration_statistics,
-            #             noise_scheduler=noise_scheduler,
-            #             get_block_poses=True,
-            #             conditioning_samples=conditioning_sample,
-            #         )
-            #         trajectories.append(trajectory)
-            #         if cfg.data_generation.goal_map_vis == "aggregated":
-            #             rollout_goals = {
-            #                 "behavioral_goal": block_pose_eval,
-            #                 "achieved_goals": block_poses,
-            #             }
-            #             behavioral_achieved_goals.append(rollout_goals)
-            #             figure, fig_name = aggregated_goal_map_visualisation(
-            #                 behavioral_achieved_goals
-            #             )
-            #             logger.log_figure(
-            #                 figure,
-            #                 task="aggregated_goal_map_visualisation",
-            #                 file_name=fig_name,
-            #                 step=p + 1,
-            #                 mode="map",
-            #             )
-            #         elif (
-            #             cfg.data_generation.goal_map_vis
-            #             == "individual_rollout"
-            #         ):
-            #             figure, fig_name = goal_map_visualisation(
-            #                 goal_pose=block_pose_eval,
-            #                 achieved_goals=block_poses,
-            #                 num_refinement=p,
-            #                 num_rollout=e,
-            #             )
-            #             logger.log_figure(
-            #                 figure,
-            #                 task=f"goal_map_visualisation/refinement{p}",
-            #                 file_name=fig_name,
-            #                 step=p,
-            #                 mode="map",
-            #             )
-            dataset = build_expert_dataset(
-                cfg, expert_dataset, cfg.data_generation.num_episodes, 32
-            )
-            logging.info(f"Number of training examples: {len(dataset)}")
-            dataloader = torch.utils.data.DataLoader(
-                dataset,
-                batch_size=cfg.training.batch_size,
-                shuffle=True,
-                num_workers=cfg.training.num_workers,
-                pin_memory=True,
-            )
-            for batch in dataloader:
-                batch = batch_normalize_expert_input(
-                    batch, demonstration_statistics
-                )
-            logging.info(f"Number of training examples: {len(dataset)}")
+        # else:
+        #     logging.info("Generating Rollouts with Refined Policy.")
+        # if cfg.data_generation.get_block_poses:
+        #     trajectories = []
+        #     if cfg.data_generation.conditioning == "end_goal":
+        #         # Use end goal as behavioral goal
+        #         conditioning_sample = successes[
+        #             np.random.randint(len(successes))
+        #         ]
+        #     elif cfg.data_generation.conditioning == "achieved_goal":
+        #         # Use achieved goal as behavioral goal
+        #         goal_idx = random.randint(0, len(block_poses) - 1)
+        #         block_pose_eval = block_poses[goal_idx]
+        #         conditioning_sample = trajectory["reached_goals"][goal_idx]
+        #     else:
+        #         raise ValueError(
+        #             "Conditioning for generation must be either 'end_goal' or 'achieved_goal'."
+        #         )
+        #     for e in range(cfg.data_generation.num_episodes):
+        #         trajectory, block_poses = get_guided_rollout(
+        #             episode_length=cfg.data_generation.episode_length,
+        #             env=env,
+        #             model=ema_nets,
+        #             device=cfg.device,
+        #             network_params=params,
+        #             normalization_stats=demonstration_statistics,
+        #             noise_scheduler=noise_scheduler,
+        #             get_block_poses=True,
+        #             conditioning_samples=conditioning_sample,
+        #         )
+        #         trajectories.append(trajectory)
+        #         if cfg.data_generation.goal_map_vis == "aggregated":
+        #             rollout_goals = {
+        #                 "behavioral_goal": block_pose_eval,
+        #                 "achieved_goals": block_poses,
+        #             }
+        #             behavioral_achieved_goals.append(rollout_goals)
+        #             figure, fig_name = aggregated_goal_map_visualisation(
+        #                 behavioral_achieved_goals
+        #             )
+        #             logger.log_figure(
+        #                 figure,
+        #                 task="aggregated_goal_map_visualisation",
+        #                 file_name=fig_name,
+        #                 step=p + 1,
+        #                 mode="map",
+        #             )
+        #         elif (
+        #             cfg.data_generation.goal_map_vis
+        #             == "individual_rollout"
+        #         ):
+        #             figure, fig_name = goal_map_visualisation(
+        #                 goal_pose=block_pose_eval,
+        #                 achieved_goals=block_poses,
+        #                 num_refinement=p,
+        #                 num_rollout=e,
+        #             )
+        #             logger.log_figure(
+        #                 figure,
+        #                 task=f"goal_map_visualisation/refinement{p}",
+        #                 file_name=fig_name,
+        #                 step=p,
+        #                 mode="map",
+        #             )
+        # dataset = build_expert_dataset(
+        #     # cfg, expert_dataset, cfg.data_generation.num_episodes, 32
+        #     cfg, expert_dataset, expert_dataset.num_episodes, 15
+        # )
+        # logging.info(f"Number of training examples: {len(dataset)}")
+        # dataloader = torch.utils.data.DataLoader(
+        #     dataset,
+        #     batch_size=cfg.training.batch_size,
+        #     shuffle=True,
+        #     num_workers=cfg.training.num_workers,
+        #     pin_memory=True,
+        # )
+        # for batch in dataloader:
+        #     batch = batch_normalize_expert_input(
+        #         batch, demonstration_statistics
+        #     )
+        # logging.info(f"Number of training examples: {len(dataset)}")
         # Training
         with tqdm.tqdm(
             range(cfg.training.num_epochs), desc="Epoch", leave=False
         ) as tglobal:
+            nets.train()
             for nepoch in tglobal:
                 logging.info(f"Epoch {nepoch + 1}/{cfg.training.num_epochs}")
                 epoch_losses = []
@@ -361,7 +343,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         grad_scaler.update()
                         optimizer.zero_grad()
                         lr_scheduler.step()
-                        ema.step(nets.parameters())
+                        # ema.step(nets.parameters())
                         info = {
                             "loss": loss.item(),
                             "grad_norm": float(grad_norm),
@@ -381,8 +363,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             logging.info(" | ".join(log_epoch))
 
         # Weights of the EMA model for inference
-        ema_nets = nets
-        ema.copy_to(ema_nets.parameters())
+        # ema_nets = nets
+        # ema.copy_to(ema_nets.parameters())
 
         if cfg.save_model:
             logging.info("Saving Model.")
@@ -404,7 +386,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     video_path="video/pusht",
                     video_prefix="pusht_policy_refinement_" + str(p),
                     seed=cfg.seed + 1,
-                    model=ema_nets,
+                    # model=ema_nets,
+                    model=nets,
                     noise_scheduler=noise_scheduler,
                     observations=cfg.model.obs_horizon,
                     device=cfg.device,

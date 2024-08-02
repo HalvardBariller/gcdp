@@ -187,7 +187,7 @@ class ConditionalUnet1D(nn.Module):
         self,
         input_dim,
         global_cond_dim,
-        diffusion_step_embed_dim=256,
+        diffusion_step_embed_dim=128,
         down_dims=None,
         kernel_size=5,
         n_groups=8,
@@ -204,7 +204,7 @@ class ConditionalUnet1D(nn.Module):
         """
         super().__init__()
         if down_dims is None:
-            down_dims = [256, 512, 1024]
+            down_dims = [512, 1024, 2048]
         all_dims = [input_dim] + list(down_dims)
         start_dim = down_dims[0]
 

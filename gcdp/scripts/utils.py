@@ -124,7 +124,12 @@ def normalize_data(data, stats):
 
 
 def unnormalize_data(ndata, stats):
-    """Unnormalize the data to the original range."""
+    """Unnormalize the data to the original range.
+
+    Args:
+        ndata: Normalized data in [-1, 1] of shape (B, D)
+        stats (dict): Dictionary containing the min and max values of the data for each dimension
+    """
     ndata = (ndata + 1) / 2
     data = ndata * (stats["max"] - stats["min"]) + stats["min"]
     return data

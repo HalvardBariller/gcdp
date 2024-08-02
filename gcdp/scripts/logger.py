@@ -308,7 +308,7 @@ def log_train_info(logger: Logger, info, step, cfg):
         f"Policy Refinement: {policy_refinement}",
         f"Epoch: {epoch}",
         f"Step: {step}",
-        f"Loss: {loss:.3f}",
+        f"Loss: {loss:.6f}",
         f"Learning Rate: {lr:0.1e}",
         f"Gradient Norm: {grad_norm:.3f}",
         f"Step Time: {step_time:.3f}s",
@@ -327,7 +327,7 @@ def log_eval_info(logger: Logger, info, step, cfg, mode="eval"):
     log_items = [
         f"Policy Refinement: {policy_refinement}",
         f"Step: {step}",
-        f"Success Rate: {success_rate:.1f}%",
+        f"Success Rate: {success_rate:.2f}",
         f"Average Reward: {average_reward:.3f}",
         f"∑Rewards: {sum_rewards:.3f}",
     ]
