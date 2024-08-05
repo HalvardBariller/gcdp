@@ -33,7 +33,7 @@ delta_timestamps:
 
 
 training:
-  policy_refinement: 30
+  policy_refinement: 50
   num_epochs: 20
   batch_size: 128
   num_workers: 4

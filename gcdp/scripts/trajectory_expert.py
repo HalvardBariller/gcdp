@@ -247,7 +247,9 @@ def build_expert_dataset(
         starting_episode + num_episodes - 1
     ].item()
     rollouts = [expert_demonstrations[idx] for idx in range(from_idx, to_idx)]
-    num_padding = cfg.model.pred_horizon - cfg.model.obs_horizon + 1
+    num_padding = (
+        cfg.model.pred_horizon - cfg.model.obs_horizon + 1
+    ) * num_episodes
     dataset = EnrichedRobotDataset(
         dataset=rollouts,
         goal_horizon=goal_horizon,

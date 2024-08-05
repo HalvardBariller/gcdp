@@ -234,87 +234,24 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 cfg, nets, num_batches=len(dataloader)
             )
         # Rollout with refined policy
-        # else:
-        #     logging.info("Generating Rollouts with Refined Policy.")
-        # if cfg.data_generation.get_block_poses:
-        #     trajectories = []
-        #     if cfg.data_generation.conditioning == "end_goal":
-        #         # Use end goal as behavioral goal
-        #         conditioning_sample = successes[
-        #             np.random.randint(len(successes))
-        #         ]
-        #     elif cfg.data_generation.conditioning == "achieved_goal":
-        #         # Use achieved goal as behavioral goal
-        #         goal_idx = random.randint(0, len(block_poses) - 1)
-        #         block_pose_eval = block_poses[goal_idx]
-        #         conditioning_sample = trajectory["reached_goals"][goal_idx]
-        #     else:
-        #         raise ValueError(
-        #             "Conditioning for generation must be either 'end_goal' or 'achieved_goal'."
-        #         )
-        #     for e in range(cfg.data_generation.num_episodes):
-        #         trajectory, block_poses = get_guided_rollout(
-        #             episode_length=cfg.data_generation.episode_length,
-        #             env=env,
-        #             model=ema_nets,
-        #             device=cfg.device,
-        #             network_params=params,
-        #             normalization_stats=demonstration_statistics,
-        #             noise_scheduler=noise_scheduler,
-        #             get_block_poses=True,
-        #             conditioning_samples=conditioning_sample,
-        #         )
-        #         trajectories.append(trajectory)
-        #         if cfg.data_generation.goal_map_vis == "aggregated":
-        #             rollout_goals = {
-        #                 "behavioral_goal": block_pose_eval,
-        #                 "achieved_goals": block_poses,
-        #             }
-        #             behavioral_achieved_goals.append(rollout_goals)
-        #             figure, fig_name = aggregated_goal_map_visualisation(
-        #                 behavioral_achieved_goals
-        #             )
-        #             logger.log_figure(
-        #                 figure,
-        #                 task="aggregated_goal_map_visualisation",
-        #                 file_name=fig_name,
-        #                 step=p + 1,
-        #                 mode="map",
-        #             )
-        #         elif (
-        #             cfg.data_generation.goal_map_vis
-        #             == "individual_rollout"
-        #         ):
-        #             figure, fig_name = goal_map_visualisation(
-        #                 goal_pose=block_pose_eval,
-        #                 achieved_goals=block_poses,
-        #                 num_refinement=p,
-        #                 num_rollout=e,
-        #             )
-        #             logger.log_figure(
-        #                 figure,
-        #                 task=f"goal_map_visualisation/refinement{p}",
-        #                 file_name=fig_name,
-        #                 step=p,
-        #                 mode="map",
-        #             )
-        # dataset = build_expert_dataset(
-        #     # cfg, expert_dataset, cfg.data_generation.num_episodes, 32
-        #     cfg, expert_dataset, expert_dataset.num_episodes, 15
-        # )
-        # logging.info(f"Number of training examples: {len(dataset)}")
-        # dataloader = torch.utils.data.DataLoader(
-        #     dataset,
-        #     batch_size=cfg.training.batch_size,
-        #     shuffle=True,
-        #     num_workers=cfg.training.num_workers,
-        #     pin_memory=True,
-        # )
-        # for batch in dataloader:
-        #     batch = batch_normalize_expert_input(
-        #         batch, demonstration_statistics
-        #     )
-        # logging.info(f"Number of training examples: {len(dataset)}")
+        else:
+            dataset = build_expert_dataset(
+                # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
+                cfg,
+                expert_dataset,
+                20,
+                32,
+            )
+            logging.info(
+                f"Number of training examples: {len(dataset)}"
+            )  # 24,208?
+            dataloader = DataLoader(
+                dataset,
+                batch_size=cfg.training.batch_size,
+                shuffle=True,
+                num_workers=cfg.training.num_workers,
+                pin_memory=True,
+            )
         # Training
         with tqdm.tqdm(
             range(cfg.training.num_epochs), desc="Epoch", leave=False
