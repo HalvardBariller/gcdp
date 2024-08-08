@@ -7,3 +7,4 @@ wandb/
 gcdp/__pycache__
 runs/
 gcdp/model/diffusion_robot.py
+timestamps.md

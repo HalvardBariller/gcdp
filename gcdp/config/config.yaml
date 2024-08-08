@@ -7,7 +7,7 @@ hydra:
 device: cuda
 use_amp: false
 resume: false
-seed: 10000
+seed: 100
 
 env:
   task: pusht
@@ -34,8 +34,8 @@ delta_timestamps:
 
 training:
   policy_refinement: 50
-  num_epochs: 20
-  batch_size: 128
+  num_epochs: 12
+  batch_size: 256
   num_workers: 4
   log_interval: 20
 
@@ -61,8 +61,8 @@ model:
 
 diffusion:
   scheduler: "DDIM"
-  num_diffusion_iters_train: 50
-  num_diffusion_iters_eval: 5
+  num_diffusion_iters_train: 100
+  num_diffusion_iters_eval: 10
   beta_schedule: "squaredcos_cap_v2"
   beta_start: 0.0001
   beta_end: 0.02

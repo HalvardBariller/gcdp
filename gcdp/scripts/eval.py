@@ -1,6 +1,7 @@
 """This script contains the function to evaluate a policy in a Gym environment."""
 
 import collections
+import os
 import gymnasium as gym
 import numpy as np
 import pymunk
@@ -115,6 +116,9 @@ def eval_policy(
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
 
+    if save_video and episode == num_episodes - 1:
+        saved_path = env.video_recorder.path
+        relative_video_path = os.path.relpath(saved_path)
     env.close()
     episode_results["sum_rewards"] = sum(episode_results["rewards"])
     episode_results["success_rate"] = (
@@ -125,9 +129,11 @@ def eval_policy(
     )
     episode_results["last_goal"] = goal["pixels"]
 
-    video_files = list(Path("video").rglob("*.mp4"))
-    if video_files:
-        episode_results["rollout_video"] = video_files[0]
+    # video_files = list(Path(video_path).rglob("*.mp4"))
+    # if video_files:
+    #     episode_results["rollout_video"] = video_files[-1]
+
+    episode_results["rollout_video"] = relative_video_path
 
     return episode_results
 
@@ -312,7 +318,9 @@ def eval_policy_on_interm_goals(
         episode_results["success"].append(task_completed)
         episode_results["total_reward"].append(tot_reward)
         episode_results["minimal_distance"].append(min(distances))
-
+    if save_video and episode == num_episodes - 1:
+        saved_path = env.video_recorder.path
+        relative_video_path = os.path.relpath(saved_path)
     env.close()
     episode_results["sum_rewards"] = sum(episode_results["total_reward"])
     episode_results["success_rate"] = (
@@ -326,8 +334,10 @@ def eval_policy_on_interm_goals(
     )
     episode_results["last_goal"] = target["pixels"]
 
-    video_files = list(Path("video").rglob("*.mp4"))
-    if video_files:
-        episode_results["rollout_video"] = video_files[0]
+    # video_files = list(Path("video").rglob("*.mp4"))
+    # if video_files:
+    #     episode_results["rollout_video"] = video_files[-1]
+
+    episode_results["rollout_video"] = relative_video_path
 
     return episode_results

@@ -152,6 +152,8 @@ class Logger:
     def log_video(self, video_path: str, step: int, mode: str = "eval"):
         assert mode in {"train", "eval", "interm"}
         assert self._wandb is not None
+        print("Inside function")
+        print("video_patH", video_path)
         wandb_video = self._wandb.Video(
             video_path, fps=self._cfg.env.fps, format="mp4"
         )

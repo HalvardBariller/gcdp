@@ -217,8 +217,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
                 cfg,
                 expert_dataset,
-                20,
-                32,
+                30,
+                48,
             )
             logging.info(
                 f"Number of training examples: {len(dataset)}"
@@ -239,8 +239,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
                 cfg,
                 expert_dataset,
-                20,
-                32,
+                30,
+                48,
             )
             logging.info(
                 f"Number of training examples: {len(dataset)}"
@@ -280,7 +280,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         grad_scaler.update()
                         optimizer.zero_grad()
                         lr_scheduler.step()
-                        # ema.step(nets.parameters())
+                        ema.step(nets.parameters())
                         info = {
                             "loss": loss.item(),
                             "grad_norm": float(grad_norm),
@@ -300,8 +300,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             logging.info(" | ".join(log_epoch))
 
         # Weights of the EMA model for inference
-        # ema_nets = nets
-        # ema.copy_to(ema_nets.parameters())
+        ema_nets = nets
+        ema.copy_to(ema_nets.parameters())
 
         if cfg.save_model:
             logging.info("Saving Model.")
@@ -314,17 +314,19 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         if cfg.evaluation.eval:
             logging.info("Evaluating Model.")
             env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
+            video_path = "video/pusht/" + job_name
+            video_prefix = "pusht_policy_refinement_" + str(p)
             with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
                 eval_results = eval_policy(
                     env=env,
                     num_episodes=cfg.evaluation.num_episodes,
                     max_steps=cfg.evaluation.max_steps,
                     save_video=cfg.evaluation.save_video,
-                    video_path="video/pusht",
-                    video_prefix="pusht_policy_refinement_" + str(p),
-                    seed=cfg.seed + 1,
-                    # model=ema_nets,
-                    model=nets,
+                    video_path=video_path,
+                    video_prefix=video_prefix,
+                    seed=cfg.seed,
+                    model=ema_nets,
+                    # model=nets,
                     noise_scheduler=noise_scheduler,
                     observations=cfg.model.obs_horizon,
                     device=cfg.device,
@@ -361,7 +363,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         #             save_video=True,
         #             video_path="video/pusht/intermediate_goals",
         #             video_prefix="pusht_policy_refinement_" + str(p),
-        #             seed=cfg.seed + 1,
+        #             seed=cfg.seed + p,
         #             model=ema_nets,
         #             noise_scheduler=noise_scheduler,
         #             observations=cfg.model.obs_horizon,
