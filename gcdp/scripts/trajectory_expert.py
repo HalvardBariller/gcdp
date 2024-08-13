@@ -61,7 +61,7 @@ def batch_normalize_expert_input(
     return batch
 
 
-class EnrichedRobotDataset(torch.utils.data.Dataset):
+class EnrichedSubsequentRobotDataset(torch.utils.data.Dataset):
     """Enriched dataset that includes subsequent goals of the original expert dataset."""
 
     def __init__(
@@ -172,6 +172,80 @@ class EnrichedRobotDataset(torch.utils.data.Dataset):
         return self.enriched_data[idx]
 
 
+class EnrichedTerminalRobotDataset(torch.utils.data.Dataset):
+    """Enriched dataset that includes terminal goals of the original expert dataset (last achieved position)."""
+
+    def __init__(
+        self, dataset, lerobot_dataset, starting_idx, drop_n_last_frames=7
+    ):
+        """Initialize the dataset.
+
+        Inputs:
+            dataset: the dataset to enrich (obtained from LeRobot, usually sliced from the original expert dataset)
+            lerobot_dataset: the original expert dataset
+            starting_idx: the index in the original expert dataset of the first element in dataset
+            num_padding: the number of end-of-sequence padding transitions to add to the enriched dataset
+        """
+        self.dataset = dataset
+        self.enriched_data = []
+        self.lerobot_dataset = lerobot_dataset
+        self.starting_idx = starting_idx
+        self.drop_last = drop_n_last_frames
+        self._enrich_dataset()
+
+    def _enrich_dataset(self):
+        """Build the transition dataset with future goals.
+
+        Goal horizon is the number of steps to look ahead for the goal.
+        `g >= h - o + 1` (an observation cannot serve as goal if it is reached before the end of the action horizon)
+        # -----------------------------------------------------------------------------------------------
+        # (legend: o = obs_horizon, h = action_horizon, g = goal_horizon)
+        # |timestep                  | n-o+1 | ..... | n     | ..... | n-o+h | ..... | n-o+g  | n-o+g+1 |
+        # |observation is used       | YES   | YES   | YES   | NO    | NO    | NO    | NO     | NO      |
+        # |action is generated       | YES   | YES   | YES   | YES   | YES   | NO    | NO     | NO      |
+        # |observation used as goal  | NO    | NO    | NO    | NO    | NO    | YES   | YES    | NO      |
+        # -----------------------------------------------------------------------------------------------
+        Since several rollouts are concatenated, the goal horizon for each element must be at most the end of the current episode:
+        `g = min(i + g + 1, end_of_episode)` (where `i` is the current index)
+        """
+        n = len(self.dataset)
+        for i in range(n):
+            item = self.dataset[i]
+            agent_pos = item["observation.state"]  # (obs_horizon, obs_dim)
+            action = item["action"]  # (pred_horizon, action_dim)
+            image = item["observation.image"]  # (obs_horizon, C, H, W)
+
+            episode_index = item["episode_index"]
+            current_episode_end = self.lerobot_dataset.episode_data_index[
+                "to"
+            ][episode_index].item()
+            action_horizon = action.shape[0]
+            obs_horizon = agent_pos.shape[0]
+            if self.starting_idx + i + self.drop_last < current_episode_end:
+                self.enriched_data.append(
+                    {
+                        "observation.state": agent_pos,
+                        "action": action,
+                        "observation.image": image,
+                        "reached_goal.state": self.lerobot_dataset[
+                            current_episode_end - 1
+                        ]["observation.state"][-1],
+                        "reached_goal.image": self.lerobot_dataset[
+                            current_episode_end - 1
+                        ]["observation.image"][-1],
+                    }
+                )
+                # print(f"Enriching dataset: {i}/{n} - {current_episode_end - 1}/{n}")
+
+    def __len__(self):
+        """Return the number of samples in the dataset."""
+        return len(self.enriched_data)
+
+    def __getitem__(self, idx):
+        """Get a sample from the dataset."""
+        return self.enriched_data[idx]
+
+
 class NormalizedExpertDataset(torch.utils.data.Dataset):
     """Normalized expert dataset."""
 
@@ -218,7 +292,6 @@ def build_expert_dataset(
     cfg: DictConfig,
     expert_dataset: Dataset,
     num_episodes: int,
-    goal_horizon: int,
     normalize: bool = True,
 ):
     """
@@ -228,7 +301,6 @@ def build_expert_dataset(
         cfg : configuration file
         expert_dataset : the dataset of expert demonstrations
         num_episodes : the number of episodes to include in the dataset
-        goal_horizon : the number of steps to look ahead for the goal
         normalize : whether to normalize the dataset
     Outputs:
         dataset (Dataset): the dataset of goal-conditioned expert demonstrations
@@ -239,10 +311,10 @@ def build_expert_dataset(
     starting_episode = np.random.randint(
         0, expert_demonstrations.num_episodes - num_episodes + 1
     )
+    print(f"Starting episode: {starting_episode}")
     from_idx = expert_demonstrations.episode_data_index["from"][
         starting_episode
     ].item()
-    print("From idx:", from_idx)
     to_idx = expert_demonstrations.episode_data_index["to"][
         starting_episode + num_episodes - 1
     ].item()
@@ -250,13 +322,28 @@ def build_expert_dataset(
     num_padding = (
         cfg.model.pred_horizon - cfg.model.obs_horizon + 1
     ) * num_episodes
-    dataset = EnrichedRobotDataset(
-        dataset=rollouts,
-        goal_horizon=goal_horizon,
-        lerobot_dataset=expert_demonstrations,
-        starting_idx=from_idx,
-        num_padding=num_padding,
-    )
+    if cfg.expert_data.transitions == "subsequent":
+        print("Building subsequent dataset...")
+        # number of steps to look ahead for the goal
+        goal_horizon = cfg.expert_data.goal_horizon
+        dataset = EnrichedSubsequentRobotDataset(
+            dataset=rollouts,
+            goal_horizon=goal_horizon,
+            lerobot_dataset=expert_demonstrations,
+            starting_idx=from_idx,
+            num_padding=num_padding,
+        )
+    elif cfg.expert_data.transitions == "terminal":
+        print("Building terminal dataset...")
+        dataset = EnrichedTerminalRobotDataset(
+            dataset=rollouts,
+            lerobot_dataset=expert_demonstrations,
+            starting_idx=from_idx,
+        )
+    else:
+        raise ValueError(
+            f"Invalid transition type {cfg.expert_data.transitions}"
+        )
     if normalize:
         dataset = NormalizedExpertDataset(
             expert_dataset=dataset,
@@ -281,21 +368,8 @@ if __name__ == "__main__":
         dataset = build_expert_dataset(
             cfg,
             expert_dataset,
-            6,
-            15,
+            3,
+            normalize=True,
         )
-        expert_keys = ["observation.state", "action", "observation.image"]
-        created_keys = ["observation.state", "action", "observation.image"]
-        # for x, y in zip(expert_keys, created_keys):
-        # print(torch.equal(expert_dataset[161][x], dataset[146][y]))
-        # print(torch.equal(expert_dataset[400][x], dataset[400][y]))
-        # print("Goal:")
-        # print(torch.equal(dataset[0]["reached_goal_agent_pos"], dataset[15]["agent_pos"][-1]))
-        # print(torch.equal(dataset[0]["reached_goal_image"], dataset[15]["image"][-1]))
-        for i in range(1):
-            print("Expert:")
-            print(dataset[i]["observation.state"])
-            print(dataset[i]["action"])
-            print(dataset[i]["observation.image"])
 
     main()

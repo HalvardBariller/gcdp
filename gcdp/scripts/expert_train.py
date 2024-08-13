@@ -214,15 +214,11 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         # Initial random rollout
         if p == 0:
             dataset = build_expert_dataset(
-                # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
                 cfg,
                 expert_dataset,
-                30,
-                48,
+                cfg.expert_data.num_episodes,
             )
-            logging.info(
-                f"Number of training examples: {len(dataset)}"
-            )  # 24,208?
+            logging.info(f"Number of training examples: {len(dataset)}")
             dataloader = DataLoader(
                 dataset,
                 batch_size=cfg.training.batch_size,
@@ -236,11 +232,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         # Rollout with refined policy
         else:
             dataset = build_expert_dataset(
-                # cfg, expert_dataset, cfg.data_generation.num_episodes, 15
                 cfg,
                 expert_dataset,
-                30,
-                48,
+                cfg.expert_data.num_episodes,
             )
             logging.info(
                 f"Number of training examples: {len(dataset)}"
@@ -280,7 +274,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         grad_scaler.update()
                         optimizer.zero_grad()
                         lr_scheduler.step()
-                        ema.step(nets.parameters())
+                        # ema.step(nets.parameters())
                         info = {
                             "loss": loss.item(),
                             "grad_norm": float(grad_norm),
@@ -300,8 +294,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             logging.info(" | ".join(log_epoch))
 
         # Weights of the EMA model for inference
-        ema_nets = nets
-        ema.copy_to(ema_nets.parameters())
+        # ema_nets = nets
+        # ema.copy_to(ema_nets.parameters())
 
         if cfg.save_model:
             logging.info("Saving Model.")
@@ -325,8 +319,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     video_path=video_path,
                     video_prefix=video_prefix,
                     seed=cfg.seed,
-                    model=ema_nets,
-                    # model=nets,
+                    # model=ema_nets,
+                    model=nets,
                     noise_scheduler=noise_scheduler,
                     observations=cfg.model.obs_horizon,
                     device=cfg.device,

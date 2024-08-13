@@ -26,6 +26,12 @@ data_generation:
   goal_map_vis: aggregated
   # expert_data: true
 
+expert_data:
+  num_episodes: 30
+  transitions: "subsequent" # "subsequent" or "terminal"
+  goal_horizon: 48
+
+
 delta_timestamps:
   observation_image: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
   observation_state: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
@@ -33,8 +39,8 @@ delta_timestamps:
 
 
 training:
-  policy_refinement: 50
-  num_epochs: 12
+  policy_refinement: 100
+  num_epochs: 15
   batch_size: 256
   num_workers: 4
   log_interval: 20
