@@ -2,11 +2,6 @@
 
 import warnings
 
-from gcdp.scripts.trajectory_expert import (
-    batch_normalize_expert_input,
-    build_expert_dataset,
-    load_expert_dataset,
-)
 
 warnings.filterwarnings(
     "ignore",
@@ -53,14 +48,19 @@ from gcdp.scripts.logger import (
     log_output_dir,
     log_train_info,
 )
-from gcdp.scripts.visualisations import (
-    aggregated_goal_map_visualisation,
-    goal_map_visualisation,
+from gcdp.scripts.trajectory_expert import (
+    batch_normalize_expert_input,
+    build_expert_dataset,
+    load_expert_dataset,
 )
 from gcdp.scripts.utils import (
     get_demonstration_statistics,
     pusht_init_env,
     set_global_seed,
+)
+from gcdp.scripts.visualisations import (
+    aggregated_goal_map_visualisation,
+    goal_map_visualisation,
 )
 
 
@@ -225,27 +225,29 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 shuffle=True,
                 num_workers=cfg.training.num_workers,
                 pin_memory=True,
+                timeout=30,
             )
             optimizer, lr_scheduler = make_optimizer_and_scheduler(
                 cfg, nets, num_batches=len(dataloader)
             )
         # Rollout with refined policy
         else:
-            dataset = build_expert_dataset(
-                cfg,
-                expert_dataset,
-                cfg.expert_data.num_episodes,
-            )
-            logging.info(
-                f"Number of training examples: {len(dataset)}"
-            )  # 24,208?
-            dataloader = DataLoader(
-                dataset,
-                batch_size=cfg.training.batch_size,
-                shuffle=True,
-                num_workers=cfg.training.num_workers,
-                pin_memory=True,
-            )
+            if cfg.expert_data.num_episodes != 206:
+                dataset = build_expert_dataset(
+                    cfg,
+                    expert_dataset,
+                    cfg.expert_data.num_episodes,
+                )
+                logging.info(
+                    f"Number of training examples: {len(dataset)}"
+                )  # 24,208?
+                dataloader = DataLoader(
+                    dataset,
+                    batch_size=cfg.training.batch_size,
+                    shuffle=True,
+                    num_workers=cfg.training.num_workers,
+                    pin_memory=True,
+                )
         # Training
         with tqdm.tqdm(
             range(cfg.training.num_epochs), desc="Epoch", leave=False
@@ -393,16 +395,16 @@ def train_cli(cfg: DictConfig) -> None:
     )
 
 
-@hydra.main(
-    version_base="1.2", config_path="../config", config_name="config_debug"
-)
-def train_debug(cfg: DictConfig) -> None:
-    """Training from a configuration file."""
-    training_config(
-        cfg,
-        out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
-        job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
-    )
+# @hydra.main(
+#     version_base="1.2", config_path="../config", config_name="config_debug"
+# )
+# def train_debug(cfg: DictConfig) -> None:
+#     """Training from a configuration file."""
+#     training_config(
+#         cfg,
+#         out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
+#         job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
+#     )
 
 
 if __name__ == "__main__":
