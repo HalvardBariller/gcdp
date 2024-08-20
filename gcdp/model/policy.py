@@ -4,7 +4,7 @@ import collections
 import numpy as np
 import torch
 
-from gcdp.scripts.utils import normalize_data, unnormalize_data
+from gcdp.scripts.common.utils import normalize_data, unnormalize_data
 from diffusers import DDPMScheduler, DDIMScheduler
 
 

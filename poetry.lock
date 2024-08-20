@@ -3205,25 +3205,22 @@ tqdm = "*"
 
 [[package]]
 name = "protobuf"
-version = "4.21.1"
+version = "5.27.3"
 description = ""
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "protobuf-4.21.1-cp310-abi3-win32.whl", hash = "sha256:52c1e44e25f2949be7ffa7c66acbfea940b0945dd416920231f7cb30ea5ac6db"},
-    {file = "protobuf-4.21.1-cp310-abi3-win_amd64.whl", hash = "sha256:72d357cc4d834cc85bd957e8b8e1f4b64c2eac9ca1a942efeb8eb2e723fca852"},
-    {file = "protobuf-4.21.1-cp37-abi3-macosx_10_9_universal2.whl", hash = "sha256:3767c64593a49c7ac0accd08ed39ce42744405f0989d468f0097a17496fdbe84"},
-    {file = "protobuf-4.21.1-cp37-abi3-manylinux2014_aarch64.whl", hash = "sha256:0d4719e724472e296062ba8e82a36d64693fcfdb550d9dff98af70ca79eafe3d"},
-    {file = "protobuf-4.21.1-cp37-abi3-manylinux2014_x86_64.whl", hash = "sha256:a4c0c6f2f95a559e59a0258d3e4b186f340cbdc5adec5ce1bc06d01972527c88"},
-    {file = "protobuf-4.21.1-cp37-cp37m-win32.whl", hash = "sha256:32fff501b6df3050936d1839b80ea5899bf34db24792d223d7640611f67de15a"},
-    {file = "protobuf-4.21.1-cp37-cp37m-win_amd64.whl", hash = "sha256:b3d7d4b4945fe3c001403b6c24442901a5e58c0a3059290f5a63523ed4435f82"},
-    {file = "protobuf-4.21.1-cp38-cp38-win32.whl", hash = "sha256:34400fd76f85bdae9a2e9c1444ea4699c0280962423eff4418765deceebd81b5"},
-    {file = "protobuf-4.21.1-cp38-cp38-win_amd64.whl", hash = "sha256:c8829092c5aeb61619161269b2f8a2e36fd7cb26abbd9282d3bc453f02769146"},
-    {file = "protobuf-4.21.1-cp39-cp39-win32.whl", hash = "sha256:2b35602cb65d53c168c104469e714bf68670335044c38eee3c899d6a8af03ffc"},
-    {file = "protobuf-4.21.1-cp39-cp39-win_amd64.whl", hash = "sha256:3f2ed842e8ca43b790cb4a101bcf577226e0ded98a6a6ba2d5e12095a08dc4da"},
-    {file = "protobuf-4.21.1-py2.py3-none-any.whl", hash = "sha256:b309fda192850ac4184ca1777aab9655564bc8d10a9cc98f10e1c8bf11295c22"},
-    {file = "protobuf-4.21.1-py3-none-any.whl", hash = "sha256:79cd8d0a269b714f6b32641f86928c718e8d234466919b3f552bfb069dbb159b"},
-    {file = "protobuf-4.21.1.tar.gz", hash = "sha256:5d9b5c8270461706973c3871c6fbdd236b51dfe9dab652f1fb6a36aa88287e47"},
+    {file = "protobuf-5.27.3-cp310-abi3-win32.whl", hash = "sha256:dcb307cd4ef8fec0cf52cb9105a03d06fbb5275ce6d84a6ae33bc6cf84e0a07b"},
+    {file = "protobuf-5.27.3-cp310-abi3-win_amd64.whl", hash = "sha256:16ddf3f8c6c41e1e803da7abea17b1793a97ef079a912e42351eabb19b2cffe7"},
+    {file = "protobuf-5.27.3-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:68248c60d53f6168f565a8c76dc58ba4fa2ade31c2d1ebdae6d80f969cdc2d4f"},
+    {file = "protobuf-5.27.3-cp38-abi3-manylinux2014_aarch64.whl", hash = "sha256:b8a994fb3d1c11156e7d1e427186662b64694a62b55936b2b9348f0a7c6625ce"},
+    {file = "protobuf-5.27.3-cp38-abi3-manylinux2014_x86_64.whl", hash = "sha256:a55c48f2a2092d8e213bd143474df33a6ae751b781dd1d1f4d953c128a415b25"},
+    {file = "protobuf-5.27.3-cp38-cp38-win32.whl", hash = "sha256:043853dcb55cc262bf2e116215ad43fa0859caab79bb0b2d31b708f128ece035"},
+    {file = "protobuf-5.27.3-cp38-cp38-win_amd64.whl", hash = "sha256:c2a105c24f08b1e53d6c7ffe69cb09d0031512f0b72f812dd4005b8112dbe91e"},
+    {file = "protobuf-5.27.3-cp39-cp39-win32.whl", hash = "sha256:c84eee2c71ed83704f1afbf1a85c3171eab0fd1ade3b399b3fad0884cbcca8bf"},
+    {file = "protobuf-5.27.3-cp39-cp39-win_amd64.whl", hash = "sha256:af7c0b7cfbbb649ad26132e53faa348580f844d9ca46fd3ec7ca48a1ea5db8a1"},
+    {file = "protobuf-5.27.3-py3-none-any.whl", hash = "sha256:8572c6533e544ebf6899c360e91d6bcbbee2549251643d32c52cf8a5de295ba5"},
+    {file = "protobuf-5.27.3.tar.gz", hash = "sha256:82460903e640f2b7e34ee81a947fdaad89de796d324bcbc38ff5430bcdead82c"},
 ]
 
 [[package]]
@@ -5098,4 +5095,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "9abf44f469009e95add9cb041838487fba321c07c3899568e9be9c436279351d"
+content-hash = "dc1b46f79e477b347ffc7ed0110776613b7b138207583e836cd6329b84dee6a6"

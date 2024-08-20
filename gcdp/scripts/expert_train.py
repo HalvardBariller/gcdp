@@ -2,7 +2,6 @@
 
 import warnings
 
-
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -21,6 +20,7 @@ import hydra
 import os
 import random
 import torch
+import torch.multiprocessing as mp
 import torch.nn as nn
 import time
 import tqdm
@@ -35,32 +35,33 @@ from gcdp.model.modeling import (
     make_diffusion_model,
     make_optimizer_and_scheduler,
 )
-from gcdp.scripts.episodes import (
-    build_dataset,
-    get_guided_rollout,
-    get_random_rollout,
-)
-from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
-from gcdp.scripts.logger import (
+from gcdp.scripts.common.logger import (
     init_logging,
     Logger,
     log_eval_info,
     log_output_dir,
     log_train_info,
 )
-from gcdp.scripts.trajectory_expert import (
-    batch_normalize_expert_input,
-    build_expert_dataset,
-    load_expert_dataset,
-)
-from gcdp.scripts.utils import (
+from gcdp.scripts.common.utils import (
     get_demonstration_statistics,
     pusht_init_env,
     set_global_seed,
 )
-from gcdp.scripts.visualisations import (
+from gcdp.scripts.common.visualisations import (
     aggregated_goal_map_visualisation,
     goal_map_visualisation,
+)
+from gcdp.scripts.datasets.episodes import (
+    build_dataset,
+    get_guided_rollout,
+    get_random_rollout,
+)
+from gcdp.scripts.datasets.expert_datasets import custom_collate_fn
+from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
+from gcdp.scripts.trajectory_expert import (
+    batch_normalize_expert_input,
+    build_expert_dataset,
+    load_expert_dataset,
 )
 
 
@@ -225,14 +226,15 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 shuffle=True,
                 num_workers=cfg.training.num_workers,
                 pin_memory=True,
-                timeout=30,
+                collate_fn=custom_collate_fn,
+                persistent_workers=True,
             )
             optimizer, lr_scheduler = make_optimizer_and_scheduler(
                 cfg, nets, num_batches=len(dataloader)
             )
         # Rollout with refined policy
         else:
-            if cfg.expert_data.num_episodes != 206:
+            if cfg.expert_data.num_episodes != expert_dataset.num_episodes:
                 dataset = build_expert_dataset(
                     cfg,
                     expert_dataset,
@@ -247,6 +249,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     shuffle=True,
                     num_workers=cfg.training.num_workers,
                     pin_memory=True,
+                    collate_fn=custom_collate_fn,
+                    persistent_workers=True,
                 )
         # Training
         with tqdm.tqdm(
@@ -298,6 +302,10 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         # Weights of the EMA model for inference
         # ema_nets = nets
         # ema.copy_to(ema_nets.parameters())
+
+        # Cleaning before next policy refinement
+        torch.cuda.empty_cache()
+        dataloader.__del__()
 
         if cfg.save_model:
             logging.info("Saving Model.")
@@ -408,4 +416,5 @@ def train_cli(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
+    # mp.set_start_method("spawn", force=True)
     train_cli()

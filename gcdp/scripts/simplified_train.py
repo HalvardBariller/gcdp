@@ -34,15 +34,15 @@ from gcdp.model.diffusion import (
     replace_bn_with_gn,
     ConditionalUnet1D,
 )
-from gcdp.scripts.episodes import (
+from gcdp.scripts.datasets.episodes import (
     get_random_rollout,
     get_guided_rollout,
     PushTDatasetFromTrajectories,
     EnrichedDataset,
 )
 from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
-from gcdp.scripts.logger import init_logging
-from gcdp.scripts.utils import ScaleRewardWrapper, set_global_seed
+from gcdp.scripts.common.logger import init_logging
+from gcdp.scripts.common.utils import ScaleRewardWrapper, set_global_seed
 
 # Create the environment with sparse rewards
 env = gym.make(

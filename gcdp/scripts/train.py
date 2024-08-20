@@ -33,24 +33,24 @@ from gcdp.model.modeling import (
     make_diffusion_model,
     make_optimizer_and_scheduler,
 )
-from gcdp.scripts.episodes import (
+from gcdp.scripts.datasets.episodes import (
     build_dataset,
     get_guided_rollout,
     get_random_rollout,
 )
 from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
-from gcdp.scripts.logger import (
+from gcdp.scripts.common.logger import (
     init_logging,
     Logger,
     log_eval_info,
     log_output_dir,
     log_train_info,
 )
-from gcdp.scripts.visualisations import (
+from gcdp.scripts.common.visualisations import (
     aggregated_goal_map_visualisation,
     goal_map_visualisation,
 )
-from gcdp.scripts.utils import (
+from gcdp.scripts.common.utils import (
     get_demonstration_statistics,
     pusht_init_env,
     set_global_seed,

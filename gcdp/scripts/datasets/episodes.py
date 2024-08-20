@@ -16,7 +16,7 @@ import warnings
 from diffusers import DDPMScheduler, DDIMScheduler
 
 from gcdp.model.policy import diff_policy
-from gcdp.scripts.utils import ScaleRewardWrapper, normalize_data
+from gcdp.scripts.common.utils import ScaleRewardWrapper, normalize_data
 
 
 def get_random_rollout(

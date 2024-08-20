@@ -28,8 +28,9 @@ data_generation:
 
 expert_data:
   num_episodes: 50
-  transitions: "terminal" # "subsequent" or "terminal"
-  goal_horizon: 48
+  transitions: "evenly_spaced" # "subsequent", "terminal", "evenly_spaced"
+  goal_horizon: 48 # for "subsequent" goal transitions
+  num_goals: 10 # for "evenly_spaced" goal transitions
 
 
 delta_timestamps:
