@@ -227,7 +227,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                 num_workers=cfg.training.num_workers,
                 pin_memory=True,
                 collate_fn=custom_collate_fn,
-                persistent_workers=True,
+                persistent_workers=(
+                    True if cfg.training.num_workers > 0 else False
+                ),
             )
             optimizer, lr_scheduler = make_optimizer_and_scheduler(
                 cfg, nets, num_batches=len(dataloader)
@@ -250,7 +252,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     num_workers=cfg.training.num_workers,
                     pin_memory=True,
                     collate_fn=custom_collate_fn,
-                    persistent_workers=True,
+                    persistent_workers=(
+                        True if cfg.training.num_workers > 0 else False
+                    ),
                 )
         # Training
         with tqdm.tqdm(
@@ -305,7 +309,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
 
         # Cleaning before next policy refinement
         torch.cuda.empty_cache()
-        dataloader.__del__()
+        del dataloader
 
         if cfg.save_model:
             logging.info("Saving Model.")

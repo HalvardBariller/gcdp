@@ -11,9 +11,12 @@ import tqdm
 
 from gcdp.scripts.common.utils import get_demonstration_statistics
 from gcdp.scripts.datasets.expert_datasets import (
-    EnrichedEvenlySpacedRobotDataset,
+    # EnrichedEvenlySpacedRobotDataset,
+    # EnrichedRandomRobotDataset,
+    EnrichedRobotDataset,
     EnrichedSubsequentRobotDataset,
     EnrichedTerminalRobotDataset,
+    enrich_dataset,
 )
 
 
@@ -134,7 +137,7 @@ def build_expert_dataset(
     """
     demonstration_statistics = get_demonstration_statistics()
     num_episodes = min(num_episodes, expert_demonstrations.num_episodes)
-
+    possible_transitions = ["evenly_spaced", "random", "terminal", "beta"]
     if cfg.expert_data.transitions == "subsequent":
         print(
             "Building dataset with goals immediately subsequent to the current state in the trajectores..."
@@ -164,33 +167,35 @@ def build_expert_dataset(
             num_padding=num_padding,
         )
 
-    elif cfg.expert_data.transitions == "terminal":
-        print(
-            "Building dataset with goals corresponding to terminal states of the trajectories..."
-        )
-        episode_indices = np.random.choice(
-            expert_demonstrations.num_episodes, num_episodes, replace=False
-        )
-        episodes_datasets = []
-        for episode_index in tqdm.tqdm(episode_indices):
-            from_idx = expert_demonstrations.episode_data_index["from"][
-                episode_index
-            ].item()
-            to_idx = expert_demonstrations.episode_data_index["to"][
-                episode_index
-            ].item()
-            rollout = [
-                expert_demonstrations[idx] for idx in range(from_idx, to_idx)
-            ]
-            dataset = EnrichedTerminalRobotDataset(
-                dataset=rollout,
-            )
-            episodes_datasets.append(dataset)
-        dataset = torch.utils.data.ConcatDataset(episodes_datasets)
+    # elif cfg.expert_data.transitions == "terminal":
+    #     print(
+    #         "Building dataset with goals corresponding to terminal states of the trajectories..."
+    #     )
+    #     episode_indices = np.random.choice(
+    #         expert_demonstrations.num_episodes, num_episodes, replace=False
+    #     )
+    #     episodes_datasets = []
+    #     for episode_index in tqdm.tqdm(episode_indices):
+    #         from_idx = expert_demonstrations.episode_data_index["from"][
+    #             episode_index
+    #         ].item()
+    #         to_idx = expert_demonstrations.episode_data_index["to"][
+    #             episode_index
+    #         ].item()
+    #         rollout = [
+    #             expert_demonstrations[idx] for idx in range(from_idx, to_idx)
+    #         ]
+    #         dataset = EnrichedTerminalRobotDataset(
+    #             dataset=rollout,
+    #         )
+    #         episodes_datasets.append(dataset)
+    #     dataset = torch.utils.data.ConcatDataset(episodes_datasets)
 
-    elif cfg.expert_data.transitions == "evenly_spaced":
+    elif cfg.expert_data.transitions in possible_transitions:
         print(
-            "Building dataset with goals evenly spaced along the trajectories..."
+            "Building dataset with ",
+            cfg.expert_data.transitions,
+            " goals along the trajectories...",
         )
         episode_indices = np.random.choice(
             expert_demonstrations.num_episodes, num_episodes, replace=False
@@ -206,10 +211,12 @@ def build_expert_dataset(
             rollout = [
                 expert_demonstrations[idx] for idx in range(from_idx, to_idx)
             ]
-            dataset = EnrichedEvenlySpacedRobotDataset(
-                dataset=rollout,
+            dataset = enrich_dataset(
+                rollout,
+                cfg.expert_data.transitions,
                 num_goals=cfg.expert_data.num_goals,
             )
+            dataset = EnrichedRobotDataset(dataset=dataset)
             episodes_datasets.append(dataset)
         dataset = torch.utils.data.ConcatDataset(episodes_datasets)
 
