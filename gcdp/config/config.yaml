@@ -7,7 +7,7 @@ hydra:
 device: cuda
 use_amp: false
 resume: false
-seed: 100
+seed: 1000
 
 env:
   task: pusht

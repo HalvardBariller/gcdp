@@ -323,12 +323,14 @@ def log_eval_info(logger: Logger, info, step, cfg, mode="eval"):
     success_rate = info["success_rate"]
     average_reward = info["average_reward"]
     sum_rewards = info["sum_rewards"]
+    average_max_reward = info["average_max_reward"]
     policy_refinement = info["policy_refinement"]
     log_items = [
         f"Policy Refinement: {policy_refinement}",
         f"Step: {step}",
         f"Success Rate: {success_rate:.2f}",
         f"Average Reward: {average_reward:.3f}",
+        f"Average Max Reward: {average_max_reward:.3f}",
         f"∑Rewards: {sum_rewards:.3f}",
     ]
     if mode == "interm":

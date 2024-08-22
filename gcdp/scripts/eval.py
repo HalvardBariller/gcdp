@@ -69,6 +69,7 @@ def eval_policy(
     episode_results = {
         "success": [],
         "rewards": [],
+        "max_reward": [],
     }
 
     for episode in tqdm.tqdm(range(num_episodes)):
@@ -86,6 +87,7 @@ def eval_policy(
         s, _ = env.reset(seed=seed)
         done = False
         tot_reward = 0
+        max_reward = 0
         observations = collections.deque([s] * obs_horizon, maxlen=obs_horizon)
         step = 0
         while not done:
@@ -93,6 +95,7 @@ def eval_policy(
             if action_queue:
                 s, r, done, _, _ = env.step(action_queue.popleft())
                 tot_reward += r
+                max_reward = max(max_reward, r)
                 step += 1
                 if done:
                     task_completed = True
@@ -115,6 +118,7 @@ def eval_policy(
                 done = True
         episode_results["success"].append(task_completed)
         episode_results["rewards"].append(tot_reward)
+        episode_results["max_reward"].append(max_reward)
 
     if save_video and episode == num_episodes - 1:
         saved_path = env.video_recorder.path
@@ -126,6 +130,9 @@ def eval_policy(
     )
     episode_results["average_reward"] = (
         episode_results["sum_rewards"] / num_episodes
+    )
+    episode_results["average_max_reward"] = (
+        sum(episode_results["max_reward"]) / num_episodes
     )
     episode_results["last_goal"] = goal["pixels"]
 
@@ -261,6 +268,7 @@ def eval_policy_on_interm_goals(
         "success": [],
         "total_reward": [],
         "minimal_distance": [],
+        "max_reward": [],
     }
 
     info_poses = {"goal_pose": target_block_pose}
@@ -278,6 +286,7 @@ def eval_policy_on_interm_goals(
         s, _ = env.reset(seed=seed)
         done = False
         tot_reward = 0
+        max_reward = 0
         observations = collections.deque([s] * obs_horizon, maxlen=obs_horizon)
         step = 0
         while not done:
@@ -293,6 +302,7 @@ def eval_policy_on_interm_goals(
                     info_poses["block_pose"] - info_poses["goal_pose"]
                 )
                 tot_reward += coverage
+                max_reward = max(max_reward, coverage)
                 done = coverage > 0.9
                 coverages.append(coverage)
                 distances.append(l2_norm)
@@ -318,6 +328,7 @@ def eval_policy_on_interm_goals(
         episode_results["success"].append(task_completed)
         episode_results["total_reward"].append(tot_reward)
         episode_results["minimal_distance"].append(min(distances))
+        episode_results["max_reward"].append(max_reward)
     if save_video and episode == num_episodes - 1:
         saved_path = env.video_recorder.path
         relative_video_path = os.path.relpath(saved_path)
@@ -328,6 +339,9 @@ def eval_policy_on_interm_goals(
     )
     episode_results["average_reward"] = (
         sum(episode_results["total_reward"]) / num_episodes
+    )
+    episode_results["average_max_reward"] = (
+        sum(episode_results["max_reward"]) / num_episodes
     )
     episode_results["average_minimal_distance"] = (
         sum(episode_results["minimal_distance"]) / num_episodes

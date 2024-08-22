@@ -15,7 +15,6 @@ from gcdp.scripts.datasets.expert_datasets import (
     # EnrichedRandomRobotDataset,
     EnrichedRobotDataset,
     EnrichedSubsequentRobotDataset,
-    EnrichedTerminalRobotDataset,
     enrich_dataset,
 )
 
