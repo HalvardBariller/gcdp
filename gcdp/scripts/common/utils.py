@@ -1,16 +1,16 @@
 """This module contains utility functions for the GCDP project."""
 
-import os
-from os import open
-import pickle
 import gymnasium as gym
 import gym_pusht
 import numpy as np
+import os
+import pickle
 import random
 import torch
 
 from copy import deepcopy
 from gymnasium.wrappers import RecordVideo
+from os import open
 
 
 def record_video(env, name, horizon=180, policy=None):

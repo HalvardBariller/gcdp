@@ -208,6 +208,10 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
     logging.info("Training Diffusion Model.")
     params = build_params(cfg)
     step = 0
+    evaluation_results = {
+        "max_reward": [],
+        "success": [],
+    }
     for p in range(cfg.training.policy_refinement):
         logging.info(
             f"Policy Refinement {p + 1}/{cfg.training.policy_refinement}"
@@ -308,8 +312,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         # ema.copy_to(ema_nets.parameters())
 
         # Cleaning before next policy refinement
-        torch.cuda.empty_cache()
-        del dataloader
+        if cfg.expert_data.num_episodes != expert_dataset.num_episodes:
+            torch.cuda.empty_cache()
+            del dataloader
 
         if cfg.save_model:
             logging.info("Saving Model.")
@@ -343,6 +348,19 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     successes=successes,
                 )
             eval_results["policy_refinement"] = p + 1
+            # Save evaluation results
+            evaluation_results["max_reward"].append(eval_results["max_reward"])
+            evaluation_results["success"].append(eval_results["success"])
+            # @TODO remove after testing
+            if cfg.evaluation.eval:
+                with open(
+                    os.path.join(out_dir, "eval_results.pkl"), "wb"
+                ) as f:
+                    print(
+                        "Results saved at: ",
+                        os.path.join(out_dir, "eval_results.pkl"),
+                    )
+                    pickle.dump(evaluation_results, f)
             log_eval_info(logger, eval_results, step, cfg, "eval")
             if cfg.wandb.enable:
                 logger.log_image(
@@ -395,6 +413,11 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         #             step,
         #             mode="interm",
         #         )
+
+    # Save evaluation results
+    if cfg.evaluation.eval:
+        with open(os.path.join(out_dir, "eval_results.pkl"), "wb") as f:
+            pickle.dump(evaluation_results, f)
 
 
 @hydra.main(version_base="1.2", config_path="../config", config_name="config")
