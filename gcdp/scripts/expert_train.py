@@ -177,6 +177,9 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
     env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
     demonstration_statistics = get_demonstration_statistics()
     successes = get_demonstration_successes("objects/successes.pkl")
+    designed_success = get_demonstration_successes(
+        "objects/designed_success.pkl"
+    )
     expert_dataset = load_expert_dataset(cfg, "lerobot/pusht")
     logger = Logger(cfg, out_dir, wandb_job_name=job_name)
     set_global_seed(cfg.seed)
@@ -353,7 +356,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     device=cfg.device,
                     network_params=params,
                     normalization_stats=demonstration_statistics,
-                    successes=successes,
+                    successes=designed_success,  # @TODO or successes=successes,
                 )
             eval_results["policy_refinement"] = p + 1
             # Save evaluation results
@@ -436,18 +439,6 @@ def train_cli(cfg: DictConfig) -> None:
         out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
         job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
     )
-
-
-# @hydra.main(
-#     version_base="1.2", config_path="../config", config_name="config_debug"
-# )
-# def train_debug(cfg: DictConfig) -> None:
-#     """Training from a configuration file."""
-#     training_config(
-#         cfg,
-#         out_dir=hydra.core.hydra_config.HydraConfig.get().run.dir,
-#         job_name=hydra.core.hydra_config.HydraConfig.get().job.name,
-#     )
 
 
 if __name__ == "__main__":
