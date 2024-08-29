@@ -58,6 +58,7 @@ optim:
     num_warmup_steps: 500
 
 model:
+  goal_conditioned: true
   vision_encoder:
     name: "resnet18" # resnet18, resnet34, resnet50
     # feature_dim: 64
