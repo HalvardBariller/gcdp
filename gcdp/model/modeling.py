@@ -31,10 +31,13 @@ def make_diffusion_model(cfg: DictConfig):
     action_dim = cfg.model.action_dim
     # TODO: TEST WITHOUT INTEGRATING AGENT IN GOAL
     goal_dim = vision_feature_dim
+    if cfg.model.goal_conditioned:
+        global_cond_dim = obs_dim * obs_horizon + goal_dim
+    else:
+        global_cond_dim = obs_dim * obs_horizon
     noise_pred_net = ConditionalUnet1D(
         input_dim=action_dim,
-        # global_cond_dim=obs_dim * obs_horizon + goal_dim,
-        global_cond_dim=obs_dim * obs_horizon,
+        global_cond_dim=global_cond_dim,
     )
     nets = nn.ModuleDict(
         {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}

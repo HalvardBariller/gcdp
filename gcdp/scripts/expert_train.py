@@ -138,9 +138,16 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
     )  # (B, obs_horizon * (D + obs_dim))
     reached_goal_cond = reached_image_features.flatten(start_dim=1)  # (B, D)
     # concatenate obs and goal
+    full_cond = (
+        [obs_cond, reached_goal_cond]
+        if cfg.model.goal_conditioned
+        else [obs_cond]
+    )
     full_cond = torch.cat(
+        full_cond,
+        dim=-1,
         # [obs_cond, reached_goal_cond], dim=-1
-        [obs_cond]
+        # [obs_cond],
     )  # (B, obs_horizon * (D + obs_dim) + D)
     full_cond = full_cond.float()
 

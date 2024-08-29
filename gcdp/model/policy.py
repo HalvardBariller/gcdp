@@ -2,6 +2,7 @@
 
 import collections
 import numpy as np
+from omegaconf import DictConfig
 import torch
 
 from gcdp.scripts.common.utils import normalize_data, unnormalize_data
@@ -17,6 +18,7 @@ def diff_policy(
     network_params: dict,
     normalization_stats: dict,
     actions_taken: int,
+    goal_conditioned: bool = True,
 ):
     """
     Predict a sequence of actions to take to reach the goal considering past observations.
@@ -86,9 +88,14 @@ def diff_policy(
             start_dim=1
         )  # (1, obs_horizon * (D + obs_dim))
         obs_cond = obs_cond.float()
+        full_cond = (
+            [obs_cond, goal_features] if goal_conditioned else [obs_cond]
+        )
         full_cond = torch.cat(
+            full_cond,
+            dim=-1,
             # [obs_cond, goal_features], dim=-1
-            [obs_cond]
+            # [obs_cond]
         )  # (1, obs_horizon * (D + obs_dim) + D)
         full_cond = full_cond.float()
 
