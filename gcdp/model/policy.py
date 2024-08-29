@@ -87,7 +87,8 @@ def diff_policy(
         )  # (1, obs_horizon * (D + obs_dim))
         obs_cond = obs_cond.float()
         full_cond = torch.cat(
-            [obs_cond, goal_features], dim=-1
+            # [obs_cond, goal_features], dim=-1
+            [obs_cond]
         )  # (1, obs_horizon * (D + obs_dim) + D)
         full_cond = full_cond.float()
 

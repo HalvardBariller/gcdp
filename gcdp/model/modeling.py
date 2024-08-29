@@ -9,6 +9,7 @@ from torch import nn
 from omegaconf import DictConfig
 from gcdp.model.diffusion import (
     ConditionalUnet1D,
+    DiffusionRgbEncoder,
     get_resnet,
     replace_bn_with_gn,
 )
@@ -16,9 +17,14 @@ from gcdp.model.diffusion import (
 
 def make_diffusion_model(cfg: DictConfig):
     """Create the diffusion model."""
-    vision_encoder = get_resnet(cfg.model.vision_encoder.name)
-    vision_encoder = replace_bn_with_gn(vision_encoder)
-    vision_feature_dim = cfg.model.vision_encoder.feature_dim
+    # vision_encoder = get_resnet(cfg.model.vision_encoder.name)
+    # vision_encoder = replace_bn_with_gn(vision_encoder)
+    vision_encoder = DiffusionRgbEncoder(cfg)
+    # @TODO: Verify this
+    # vision_feature_dim = cfg.model.vision_encoder.feature_dim
+    vision_feature_dim = (
+        cfg.model.vision_encoder.spatial_softmax_num_keypoints * 2
+    )
     agent_feature_dim = cfg.env.agent_pos_dim
     obs_dim = vision_feature_dim + agent_feature_dim
     obs_horizon = cfg.model.obs_horizon
@@ -27,8 +33,8 @@ def make_diffusion_model(cfg: DictConfig):
     goal_dim = vision_feature_dim
     noise_pred_net = ConditionalUnet1D(
         input_dim=action_dim,
-        global_cond_dim=obs_dim * obs_horizon + goal_dim,
-        # input_dim=action_dim, global_cond_dim=obs_dim * obs_horizon
+        # global_cond_dim=obs_dim * obs_horizon + goal_dim,
+        global_cond_dim=obs_dim * obs_horizon,
     )
     nets = nn.ModuleDict(
         {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}

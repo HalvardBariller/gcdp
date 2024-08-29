@@ -139,7 +139,8 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
     reached_goal_cond = reached_image_features.flatten(start_dim=1)  # (B, D)
     # concatenate obs and goal
     full_cond = torch.cat(
-        [obs_cond, reached_goal_cond], dim=-1
+        # [obs_cond, reached_goal_cond], dim=-1
+        [obs_cond]
     )  # (B, obs_horizon * (D + obs_dim) + D)
     full_cond = full_cond.float()
 
@@ -288,7 +289,7 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         grad_scaler.update()
                         optimizer.zero_grad()
                         lr_scheduler.step()
-                        # ema.step(nets.parameters())
+                        ema.step(nets.parameters())
                         info = {
                             "loss": loss.item(),
                             "grad_norm": float(grad_norm),
@@ -308,8 +309,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
             logging.info(" | ".join(log_epoch))
 
         # Weights of the EMA model for inference
-        # ema_nets = nets
-        # ema.copy_to(ema_nets.parameters())
+        ema_nets = nets
+        ema.copy_to(ema_nets.parameters())
 
         # Cleaning before next policy refinement
         if cfg.expert_data.num_episodes != expert_dataset.num_episodes:
@@ -338,8 +339,8 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     video_path=video_path,
                     video_prefix=video_prefix,
                     seed=cfg.seed,
-                    # model=ema_nets,
-                    model=nets,
+                    model=ema_nets,
+                    # model=nets,
                     noise_scheduler=noise_scheduler,
                     observations=cfg.model.obs_horizon,
                     device=cfg.device,

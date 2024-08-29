@@ -2,7 +2,7 @@ hydra:
   run:
     dir: runs/outputs/train/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}
   job:
-    name: default
+    name: ???
 
 device: cuda
 use_amp: false
@@ -27,8 +27,8 @@ data_generation:
   # expert_data: true
 
 expert_data:
-  num_episodes: 30
-  transitions: "random" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
+  num_episodes: 206
+  transitions: "terminal" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
   goal_horizon: 48 # for "subsequent" goal transitions
   num_goals: 10 # for "evenly_spaced" goal transitions
 
@@ -59,8 +59,17 @@ optim:
 
 model:
   vision_encoder:
-    name: "resnet18"
-    feature_dim: 512
+    name: "resnet18" # resnet18, resnet34, resnet50
+    # feature_dim: 64
+    weights: null # "IMAGENET1K_V1", null
+    crop_shape: [84, 84]
+    crop_is_random: true
+    use_group_norm: true
+    spatial_softmax_num_keypoints: 32
+  input_shapes:
+    observation.image: [3, 96, 96]
+    # observation.state: [${env.agent_pos_dim}]
+    # action: [${model.action_dim}]
   obs_horizon: 2
   pred_horizon: 16
   action_horizon: 8
