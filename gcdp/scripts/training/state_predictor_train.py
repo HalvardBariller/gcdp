@@ -1,6 +1,8 @@
-"""Train the model from a configuration file."""
+"""Train the state predictor model from a configuration file."""
 
 import warnings
+
+from gcdp.scripts.training.expert_train import get_demonstration_successes
 
 warnings.filterwarnings(
     "ignore",
@@ -57,21 +59,24 @@ from gcdp.scripts.datasets.episodes import (
     get_random_rollout,
 )
 from gcdp.scripts.datasets.expert_datasets import custom_collate_fn
-from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
-from gcdp.scripts.trajectory_expert import (
+from gcdp.scripts.evaluation.eval import (
+    eval_policy,
+    eval_policy_on_interm_goals,
+)
+from gcdp.scripts.datasets.trajectory_expert import (
     batch_normalize_expert_input,
     build_expert_dataset,
     load_expert_dataset,
 )
 
 
-def get_demonstration_successes(file_path):
-    """Load the successes of the demonstrations."""
-    with open(file_path, "rb") as f:
-        successes = pickle.load(f)
-    for item in successes:
-        item["pixels"] = item["pixels"].astype(np.float64)
-    return successes
+# def get_demonstration_successes(file_path):
+#     """Load the successes of the demonstrations."""
+#     with open(file_path, "rb") as f:
+#         successes = pickle.load(f)
+#     for item in successes:
+#         item["pixels"] = item["pixels"].astype(np.float64)
+#     return successes
 
 
 def build_params(cfg: DictConfig) -> dict:
@@ -384,54 +389,17 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     str(eval_results["rollout_video"]), step, mode="eval"
                 )
 
-        # if cfg.evaluation.intermediate_goals:
-        #     logging.info("Evaluating Intermediate Goals.")
-        #     env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
-        #     # Get a random goal
-        #     goal_idx = random.randint(0, len(block_poses) - 1)
-        #     block_pose_eval = block_poses[goal_idx]
-        #     target = trajectory["reached_goals"][goal_idx]
-        #     # Inference
-        #     with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
-        #         eval_interm_results = eval_policy_on_interm_goals(
-        #             env=env,
-        #             num_episodes=10,
-        #             max_steps=200,
-        #             save_video=True,
-        #             video_path="video/pusht/intermediate_goals",
-        #             video_prefix="pusht_policy_refinement_" + str(p),
-        #             seed=cfg.seed + p,
-        #             model=ema_nets,
-        #             noise_scheduler=noise_scheduler,
-        #             observations=cfg.model.obs_horizon,
-        #             device=cfg.device,
-        #             network_params=params,
-        #             normalization_stats=demonstration_statistics,
-        #             target=target,
-        #             target_block_pose=block_pose_eval,
-        #         )
-        #     eval_interm_results["policy_refinement"] = p + 1
-        #     log_eval_info(logger, eval_interm_results, step, cfg, "interm")
-        #     if cfg.wandb.enable:
-        #         logger.log_image(
-        #             eval_interm_results["last_goal"],
-        #             "goal_conditioning",
-        #             step,
-        #             mode="interm",
-        #         )
-        #         logger.log_video(
-        #             str(eval_interm_results["rollout_video"]),
-        #             step,
-        #             mode="interm",
-        #         )
-
-    # Save evaluation results
-    if cfg.evaluation.eval:
-        with open(os.path.join(out_dir, "eval_results.pkl"), "wb") as f:
-            pickle.dump(evaluation_results, f)
+    # # Save evaluation results
+    # if cfg.evaluation.eval:
+    #     with open(os.path.join(out_dir, "eval_results.pkl"), "wb") as f:
+    #         pickle.dump(evaluation_results, f)
 
 
-@hydra.main(version_base="1.2", config_path="../config", config_name="config")
+@hydra.main(
+    version_base="1.2",
+    config_path="../config",
+    config_name="state_predictor_config",
+)
 def train_cli(cfg: DictConfig) -> None:
     """Training from a configuration file."""
     training_config(
@@ -442,5 +410,4 @@ def train_cli(cfg: DictConfig) -> None:
 
 
 if __name__ == "__main__":
-    # mp.set_start_method("spawn", force=True)
     train_cli()

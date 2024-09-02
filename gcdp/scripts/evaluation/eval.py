@@ -4,6 +4,7 @@ import collections
 import os
 import gymnasium as gym
 import numpy as np
+from omegaconf import DictConfig
 import pymunk
 import shapely.geometry as sg
 import tqdm
@@ -13,6 +14,11 @@ from gcdp.model.policy import diff_policy
 from gymnasium.wrappers import RecordVideo
 from pathlib import Path
 from pymunk.vec2d import Vec2d
+
+from gcdp.scripts.evaluation.goal_setter import (
+    closest_expert_trajectory,
+    first_state_expert_trajectory,
+)
 
 
 def eval_policy(
@@ -30,6 +36,9 @@ def eval_policy(
     video_path: str = None,
     video_prefix: str = None,
     seed: int = 42,
+    progressive_goals: bool = False,
+    expert_dataset=None,
+    cfg: DictConfig = None,
 ):
     """
     Evaluate a policy over a specified number of episodes in a Gym environment.
@@ -49,6 +58,9 @@ def eval_policy(
         network_params (dict): Parameters specific to the neural network model.
         normalization_stats: Statistics for normalizing input data.
         successes (list): List of successful outcomes to choose goals from.
+        progressive_goals (bool): If True, the goals are chosen progressively to form a curriculum based on the initial state.
+        expert_dataset (Dataset): Expert dataset.
+        cfg (DictConfig): Configuration file.
 
     Returns:
         dict: A dictionary containing the success rate, average rewards, and details of the last goal.
@@ -81,8 +93,6 @@ def eval_policy(
         task_completed = False
         # Keep track of the planned actions
         action_queue = collections.deque(maxlen=actions_taken)
-        # Randomly select a goal among the successful ones
-        goal = successes[np.random.randint(len_successes)]
         # Initialize the environment
         s, _ = env.reset(seed=seed)
         done = False
@@ -90,6 +100,18 @@ def eval_policy(
         max_reward = 0
         observations = collections.deque([s] * obs_horizon, maxlen=obs_horizon)
         step = 0
+        if not progressive_goals:
+            # Randomly select a goal among the successful ones
+            goal = successes[np.random.randint(len_successes)]
+        else:
+            # Choose goals progressively to form a curriculum based on the initial state
+            goals = closest_expert_trajectory(
+                s,
+                expert_map=first_state_expert_trajectory(
+                    expert_dataset=expert_dataset
+                ),
+                expert_dataset=expert_dataset,
+            )
         while not done:
             # Execute the planned actions
             if action_queue:
@@ -103,15 +125,24 @@ def eval_policy(
                 observations.append(s)
             # Plan new actions
             else:
+                # Select the behavioral goal based on the curriculum (if applicable)
+                if not progressive_goals:
+                    behavioral_goal = goal
+                else:
+                    if step + cfg.model.pred_horizon < len(goals):
+                        behavioral_goal = goals[step + cfg.model.pred_horizon]
+                    else:
+                        behavioral_goal = goal
                 action_chunk = diff_policy(
                     model=model,
                     noise_scheduler=noise_scheduler,
                     observations=observations,
-                    goal=goal,
+                    goal=behavioral_goal,
                     device=device,
                     network_params=network_params,
                     normalization_stats=normalization_stats,
                     actions_taken=actions_taken,
+                    goal_preprocessed=True if progressive_goals else False,
                 )
                 action_queue.extend(action_chunk)
             if step > max_steps:
@@ -134,7 +165,12 @@ def eval_policy(
     episode_results["average_max_reward"] = (
         sum(episode_results["max_reward"]) / num_episodes
     )
-    episode_results["last_goal"] = goal["pixels"]
+    if not progressive_goals:
+        episode_results["last_goal"] = goal["pixels"]
+    else:
+        episode_results["last_goal"] = behavioral_goal
+        episode_results["starting_state"] = s["pixels"]
+        episode_results["closest_expert"] = goals[0]
 
     # video_files = list(Path(video_path).rglob("*.mp4"))
     # if video_files:

@@ -135,6 +135,7 @@ def get_guided_rollout(
             reached_goals.append(s)
             block_poses.append(infos["block_pose"])
         else:
+            # @TODO: normalized
             action_chunk = diff_policy(
                 model=model,
                 noise_scheduler=noise_scheduler,

@@ -131,6 +131,7 @@ def enrich_dataset(dataset, goal_enrichment, **kwargs):
     enriched_data = []
     drop_n_last_frames = kwargs.get("drop_n_last_frames", 7)
     num_goals = kwargs.get("num_goals", 1)
+    subsequent_steps = kwargs.get("subsequent_steps", 1)
     assert num_goals > 0, "Number of goals must be greater than 0."
 
     for i in range(len(rollout) - drop_n_last_frames):
@@ -144,6 +145,18 @@ def enrich_dataset(dataset, goal_enrichment, **kwargs):
             # Terminal state of the episode as the goal
             if goal_enrichment == "terminal":
                 goals_idx = [len(rollout) - 1]
+            elif goal_enrichment == "subsequent":
+                goals_idx = range(
+                    i + action_horizon - obs_horizon + 1,
+                    min(
+                        i
+                        + action_horizon
+                        - obs_horizon
+                        + subsequent_steps
+                        + 1,
+                        len(rollout),
+                    ),
+                )
             # Evenly spaced states along the trajectory as goals
             elif goal_enrichment == "evenly_spaced":
                 goals_idx = (

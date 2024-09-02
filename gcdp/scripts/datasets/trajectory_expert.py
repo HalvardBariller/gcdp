@@ -95,25 +95,32 @@ class NormalizedExpertDataset(torch.utils.data.Dataset):
 
 def load_expert_dataset(
     cfg: DictConfig,
-    dataset_id: str,
+    timestamps: str = True,
 ):
     """Load the expert dataset from LeRobot.
 
     Args:
         cfg: configuration file
         dataset_id: the id of the dataset to load
+        timestamps: whether to include configuration timestamps
     Returns:
-        expert_demonstrations (LeRobotDataset): the expert demonstrations with configuration timestamps
+        expert_demonstrations (LeRobotDataset): the expert demonstrations with configuration timestamps if specified
     """
-    delta_timestamps = {
-        "observation.image": eval(cfg.delta_timestamps.observation_image),
-        "observation.state": eval(cfg.delta_timestamps.observation_state),
-        "action": eval(cfg.delta_timestamps.action),
-    }
-    expert_demonstrations = LeRobotDataset(
-        repo_id=dataset_id,
-        delta_timestamps=delta_timestamps,
-    )
+    dataset_id = cfg.expert_data.dataset_id
+    if timestamps:
+        delta_timestamps = {
+            "observation.image": eval(cfg.delta_timestamps.observation_image),
+            "observation.state": eval(cfg.delta_timestamps.observation_state),
+            "action": eval(cfg.delta_timestamps.action),
+        }
+        expert_demonstrations = LeRobotDataset(
+            repo_id=dataset_id,
+            delta_timestamps=delta_timestamps,
+        )
+    else:
+        expert_demonstrations = LeRobotDataset(
+            repo_id=dataset_id,
+        )
     return expert_demonstrations
 
 
@@ -136,61 +143,43 @@ def build_expert_dataset(
     """
     demonstration_statistics = get_demonstration_statistics()
     num_episodes = min(num_episodes, expert_demonstrations.num_episodes)
-    possible_transitions = ["evenly_spaced", "random", "terminal", "beta"]
-    if cfg.expert_data.transitions == "subsequent":
-        print(
-            "Building dataset with goals immediately subsequent to the current state in the trajectores..."
-        )
-        starting_episode = np.random.randint(
-            0, expert_demonstrations.num_episodes - num_episodes + 1
-        )
-        from_idx = expert_demonstrations.episode_data_index["from"][
-            starting_episode
-        ].item()
-        to_idx = expert_demonstrations.episode_data_index["to"][
-            starting_episode + num_episodes - 1
-        ].item()
-        rollouts = [
-            expert_demonstrations[idx] for idx in range(from_idx, to_idx)
-        ]
-        num_padding = (
-            cfg.model.pred_horizon - cfg.model.obs_horizon + 1
-        ) * num_episodes
-        # number of steps to look ahead for the goal
-        goal_horizon = cfg.expert_data.goal_horizon
-        dataset = EnrichedSubsequentRobotDataset(
-            dataset=rollouts,
-            goal_horizon=goal_horizon,
-            lerobot_dataset=expert_demonstrations,
-            starting_idx=from_idx,
-            num_padding=num_padding,
-        )
-
-    # elif cfg.expert_data.transitions == "terminal":
+    possible_transitions = [
+        "evenly_spaced",
+        "random",
+        "terminal",
+        "beta",
+        "subsequent",
+    ]
+    # if cfg.expert_data.transitions == "subsequent":
     #     print(
-    #         "Building dataset with goals corresponding to terminal states of the trajectories..."
+    #         "Building dataset with goals immediately subsequent to the current state in the trajectores..."
     #     )
-    #     episode_indices = np.random.choice(
-    #         expert_demonstrations.num_episodes, num_episodes, replace=False
+    #     starting_episode = np.random.randint(
+    #         0, expert_demonstrations.num_episodes - num_episodes + 1
     #     )
-    #     episodes_datasets = []
-    #     for episode_index in tqdm.tqdm(episode_indices):
-    #         from_idx = expert_demonstrations.episode_data_index["from"][
-    #             episode_index
-    #         ].item()
-    #         to_idx = expert_demonstrations.episode_data_index["to"][
-    #             episode_index
-    #         ].item()
-    #         rollout = [
-    #             expert_demonstrations[idx] for idx in range(from_idx, to_idx)
-    #         ]
-    #         dataset = EnrichedTerminalRobotDataset(
-    #             dataset=rollout,
-    #         )
-    #         episodes_datasets.append(dataset)
-    #     dataset = torch.utils.data.ConcatDataset(episodes_datasets)
+    #     from_idx = expert_demonstrations.episode_data_index["from"][
+    #         starting_episode
+    #     ].item()
+    #     to_idx = expert_demonstrations.episode_data_index["to"][
+    #         starting_episode + num_episodes - 1
+    #     ].item()
+    #     rollouts = [
+    #         expert_demonstrations[idx] for idx in range(from_idx, to_idx)
+    #     ]
+    #     num_padding = (
+    #         cfg.model.pred_horizon - cfg.model.obs_horizon + 1
+    #     ) * num_episodes
+    #     # number of steps to look ahead for the goal
+    #     goal_horizon = cfg.expert_data.goal_horizon
+    #     dataset = EnrichedSubsequentRobotDataset(
+    #         dataset=rollouts,
+    #         goal_horizon=goal_horizon,
+    #         lerobot_dataset=expert_demonstrations,
+    #         starting_idx=from_idx,
+    #         num_padding=num_padding,
+    #     )
 
-    elif cfg.expert_data.transitions in possible_transitions:
+    if cfg.expert_data.transitions in possible_transitions:
         print(
             "Building dataset with ",
             cfg.expert_data.transitions,
@@ -214,6 +203,7 @@ def build_expert_dataset(
                 rollout,
                 cfg.expert_data.transitions,
                 num_goals=cfg.expert_data.num_goals,
+                subsequent_steps=cfg.expert_data.subsequent_steps,
             )
             dataset = EnrichedRobotDataset(dataset=dataset)
             episodes_datasets.append(dataset)

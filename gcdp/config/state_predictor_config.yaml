@@ -9,40 +9,39 @@ use_amp: false
 resume: false
 seed: 1000
 
-env:
-  task: pusht
-  sparse_reward: false
-  agent_pos_dim: 2
-  fps: 10
+# env:
+#   task: pusht
+#   sparse_reward: false
+#   agent_pos_dim: 2
+#   fps: 10
 
 
-data_generation:
-  episode_length: 100
-  num_episodes: 10
-  get_block_poses: true
-  enrich_data: true
-  get_original_goal: false
-  conditioning: "achieved_goal"
-  goal_map_vis: aggregated
-  # expert_data: true
+# data_generation:
+#   episode_length: 100
+#   num_episodes: 10
+#   get_block_poses: true
+#   enrich_data: true
+#   get_original_goal: false
+#   conditioning: "achieved_goal"
+#   goal_map_vis: aggregated
+#   # expert_data: true
 
-expert_data:
-  num_episodes: 40
-  transitions: "evenly_spaced" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
-  subsequent_steps: 32 # for "subsequent" goal transitions
-  num_goals: 20 # for "evenly_spaced" goal transitions
-  dataset_id: "lerobot/pusht"
+# expert_data:
+#   num_episodes: 206
+#   transitions: "terminal" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
+#   goal_horizon: 48 # for "subsequent" goal transitions
+#   num_goals: 10 # for "evenly_spaced" goal transitions
 
 
-delta_timestamps:
-  observation_image: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
-  observation_state: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
-  action: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1 - ${model.obs_horizon} + ${model.pred_horizon})]"
+# delta_timestamps:
+#   observation_image: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
+#   observation_state: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]"
+#   action: "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1 - ${model.obs_horizon} + ${model.pred_horizon})]"
 
 
 training:
-  policy_refinement: 100
-  num_epochs: 10
+  # policy_refinement: 1
+  num_epochs: 1000
   batch_size: 256
   num_workers: 0
   log_interval: 40
@@ -59,12 +58,12 @@ optim:
     num_warmup_steps: 500
 
 model:
-  goal_conditioned: true
+  goal_conditioned: false
   vision_encoder:
     name: "resnet18" # resnet18, resnet34, resnet50
     # feature_dim: 64
     weights: null # "IMAGENET1K_V1", null
-    crop_shape: [84, 84]
+    crop_shape: [96, 96]
     crop_is_random: true
     use_group_norm: true
     spatial_softmax_num_keypoints: 32
@@ -95,9 +94,7 @@ evaluation:
   intermediate_goals: false
   num_episodes: 30
   max_steps: 300
-  progressive_goals: true
   save_video: true
-  save_progressive_goals: false
 
 wandb:
   enable: true

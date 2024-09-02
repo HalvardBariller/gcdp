@@ -19,6 +19,7 @@ def diff_policy(
     normalization_stats: dict,
     actions_taken: int,
     goal_conditioned: bool = True,
+    goal_preprocessed: bool = False,
 ):
     """
     Predict a sequence of actions to take to reach the goal considering past observations.
@@ -27,11 +28,13 @@ def diff_policy(
     - model: the model used to predict the action (vision and noise models)
     - noise_scheduler: the scheduler used to diffuse the noise
     - observations: the past observations
-    - goal: the goal to reach
+    - goal: the goal to reach (image already normalized)
     - device: the device to use
     - network_params: the parameters of the network
     - normalization_stats: the statistics used to normalize the data
     - actions_taken: the number of actions to execute
+    - goal_conditioned: whether the policy is conditioned on the goal
+    - goal_preprocessed: whether the goal is preprocessed or not (preprocessed when curriculum learning is used)
     Outputs:
     - actions: sequence of actions to execute
     """
@@ -48,21 +51,24 @@ def diff_policy(
     agent_poses = np.stack(
         [x["agent_pos"] for x in observations]
     )  # (obs_horizon, action_dim)
-    goal_image = goal["pixels"]  # (H, W, C)
-    goal_image = np.moveaxis(goal_image, -1, 0)  # (C, H, W)
-    # goal_agent = goal["agent_pos"]  # (2,)
-
     # Normalization
     images = images / 255.0
     agent_poses = normalize_data(
         agent_poses,
         stats=normalization_stats["observation.state"],
     )
-    goal_image = goal_image / 255.0
-    # goal_agent = normalize_data(
-    #     goal_agent,
-    #     stats=normalization_stats["observation.state"],
-    # )
+
+    if not goal_preprocessed:
+        goal_image = goal["pixels"]  # (H, W, C)
+        goal_image = np.moveaxis(goal_image, -1, 0)  # (C, H, W)
+        goal_image = goal_image / 255.0
+        # goal_agent = goal["agent_pos"]  # (2,)
+        # goal_agent = normalize_data(
+        #     goal_agent,
+        #     stats=normalization_stats["observation.state"],
+        # )
+    else:
+        goal_image = goal.cpu().numpy()  # (C, H, W)
 
     # device transfer
     images = torch.from_numpy(images).to(device, dtype=torch.float32)

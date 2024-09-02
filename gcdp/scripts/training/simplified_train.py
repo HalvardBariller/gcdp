@@ -40,7 +40,10 @@ from gcdp.scripts.datasets.episodes import (
     PushTDatasetFromTrajectories,
     EnrichedDataset,
 )
-from gcdp.scripts.eval import eval_policy, eval_policy_on_interm_goals
+from gcdp.scripts.evaluation.eval import (
+    eval_policy,
+    eval_policy_on_interm_goals,
+)
 from gcdp.scripts.common.logger import init_logging
 from gcdp.scripts.common.utils import ScaleRewardWrapper, set_global_seed
 

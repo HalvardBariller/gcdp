@@ -16,7 +16,7 @@ from gcdp.model.diffusion import (
 
 
 def make_diffusion_model(cfg: DictConfig):
-    """Create the diffusion model."""
+    """Create the diffusion model for the diffusion policy."""
     # vision_encoder = get_resnet(cfg.model.vision_encoder.name)
     # vision_encoder = replace_bn_with_gn(vision_encoder)
     vision_encoder = DiffusionRgbEncoder(cfg)
@@ -99,3 +99,46 @@ def make_optimizer_and_scheduler(cfg, model, num_batches):
         * num_batches,
     )
     return optimizer, lr_scheduler
+
+
+# def make_state_predictor_model(cfg: DictConfig):
+#     """Create the diffusion state predictor model."""
+#     vision_encoder = DiffusionRgbEncoder(cfg)
+#     vision_feature_dim = (
+#         cfg.model.vision_encoder.spatial_softmax_num_keypoints * 2
+#     )
+#     image_dim = cfg.model.input_shapes.observation.image
+#     global_cond_dim = vision_feature_dim
+#     noise_pred_net = ConditionalUnet1D(
+#         input_dim=image_dim,
+#         global_cond_dim=global_cond_dim,
+#     )
+#     nets = nn.ModuleDict(
+#         {"vision_encoder": vision_encoder, "noise_pred_net": noise_pred_net}
+#     )
+#     ema_nets = nets
+#     if cfg.diffusion.scheduler == "DDIM":
+#         noise_scheduler = DDIMScheduler(
+#             num_train_timesteps=cfg.diffusion.num_diffusion_iters_train,
+#             beta_start=cfg.diffusion.beta_start,
+#             beta_end=cfg.diffusion.beta_end,
+#             beta_schedule=cfg.diffusion.beta_schedule,
+#             clip_sample=cfg.diffusion.clip_sample,
+#             clip_sample_range=cfg.diffusion.clip_sample_range,
+#             prediction_type=cfg.diffusion.prediction_type,
+#         )
+#     elif cfg.diffusion.scheduler == "DDPM":
+#         noise_scheduler = DDPMScheduler(
+#             num_train_timesteps=cfg.diffusion.num_diffusion_iters_train,
+#             beta_start=cfg.diffusion.beta_start,
+#             beta_end=cfg.diffusion.beta_end,
+#             beta_schedule=cfg.diffusion.beta_schedule,
+#             clip_sample=cfg.diffusion.clip_sample,
+#             clip_sample_range=cfg.diffusion.clip_sample_range,
+#             prediction_type=cfg.diffusion.prediction_type,
+#         )
+#     device = cfg.device
+#     _ = nets.to(device)
+#     ema = EMAModel(parameters=nets.parameters(), power=0.75)
+#     _ = ema.to(device)
+#     return nets, ema_nets, ema, noise_scheduler
