@@ -403,6 +403,13 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                         step,
                         mode="eval",
                     )
+                    for i, x in enumerate(eval_results["goal_curriculum"]):
+                        logger.log_image_locally(
+                            np.moveaxis(x, 0, -1).astype(np.float32),
+                            f"goal_curriculum_{p}_{i}",
+                            "viz_curriculum",
+                        )
+
                 logger.log_video(
                     str(eval_results["rollout_video"]), step, mode="eval"
                 )

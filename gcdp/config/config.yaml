@@ -27,10 +27,10 @@ data_generation:
   # expert_data: true
 
 expert_data:
-  num_episodes: 40
-  transitions: "evenly_spaced" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
+  num_episodes: 30
+  transitions: "random" # "subsequent", "terminal", "evenly_spaced", "random", "beta"
   subsequent_steps: 32 # for "subsequent" goal transitions
-  num_goals: 20 # for "evenly_spaced" goal transitions
+  num_goals: 30 # for "evenly_spaced", "random" and "beta" goal transitions
   dataset_id: "lerobot/pusht"
 
 
@@ -42,7 +42,7 @@ delta_timestamps:
 
 training:
   policy_refinement: 100
-  num_epochs: 10
+  num_epochs: 5
   batch_size: 256
   num_workers: 0
   log_interval: 40
@@ -88,14 +88,14 @@ diffusion:
   clip_sample_range: 1.0
   prediction_type: "epsilon"
 
-save_model: false
+save_model: true
 
 evaluation:
   eval: true
   intermediate_goals: false
   num_episodes: 30
   max_steps: 300
-  progressive_goals: true
+  progressive_goals: false
   save_video: true
   save_progressive_goals: false
 

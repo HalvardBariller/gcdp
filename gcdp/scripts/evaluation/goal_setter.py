@@ -63,6 +63,6 @@ def closest_expert_trajectory(
     from_idx = expert_dataset.episode_data_index["from"][closest_expert].item()
     to_idx = expert_dataset.episode_data_index["to"][closest_expert].item()
     for idx in range(from_idx, to_idx):
-        goal = expert_dataset[idx]["observation.image"] / 255.0
+        goal = expert_dataset[idx]["observation.image"]
         goals.append(goal)
     return goals

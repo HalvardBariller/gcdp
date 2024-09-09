@@ -163,6 +163,15 @@ class Logger:
         wandb_image = self._wandb.Image(image, caption=caption)
         self._wandb.log({f"{mode}/{caption}": wandb_image}, step=step)
 
+    def log_image_locally(self, image, file_name: str, task: str):
+        """Save locally a numpy array as an image."""
+        task_dir = self.log_dir / task
+        task_dir.mkdir(parents=True, exist_ok=True)
+        if not file_name.endswith(".png"):  # or any other desired format
+            file_name += ".png"
+        file_path = task_dir / file_name
+        plt.imsave(file_path, image)
+
     def log_figure(
         self,
         fig,

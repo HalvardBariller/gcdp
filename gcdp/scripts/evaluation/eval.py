@@ -82,6 +82,7 @@ def eval_policy(
         "success": [],
         "rewards": [],
         "max_reward": [],
+        "goal_curriculum": [],
     }
 
     for episode in tqdm.tqdm(range(num_episodes)):
@@ -95,15 +96,13 @@ def eval_policy(
         action_queue = collections.deque(maxlen=actions_taken)
         # Initialize the environment
         s, _ = env.reset(seed=seed)
+        episode_results["starting_state"] = s["pixels"]
         done = False
         tot_reward = 0
         max_reward = 0
         observations = collections.deque([s] * obs_horizon, maxlen=obs_horizon)
         step = 0
-        if not progressive_goals:
-            # Randomly select a goal among the successful ones
-            goal = successes[np.random.randint(len_successes)]
-        else:
+        if progressive_goals:
             # Choose goals progressively to form a curriculum based on the initial state
             goals = closest_expert_trajectory(
                 s,
@@ -112,6 +111,8 @@ def eval_policy(
                 ),
                 expert_dataset=expert_dataset,
             )
+        # Randomly select a goal among the successful ones for further desired goal conditioning
+        desired_goal = successes[np.random.randint(len_successes)]
         while not done:
             # Execute the planned actions
             if action_queue:
@@ -127,12 +128,18 @@ def eval_policy(
             else:
                 # Select the behavioral goal based on the curriculum (if applicable)
                 if not progressive_goals:
-                    behavioral_goal = goal
+                    behavioral_goal = desired_goal
+                    goal_preprocessed = False
                 else:
                     if step + cfg.model.pred_horizon < len(goals):
                         behavioral_goal = goals[step + cfg.model.pred_horizon]
+                        goal_preprocessed = True
+                        episode_results["goal_curriculum"].append(
+                            behavioral_goal.cpu().numpy()
+                        )
                     else:
-                        behavioral_goal = goal
+                        behavioral_goal = desired_goal
+                        goal_preprocessed = False
                 action_chunk = diff_policy(
                     model=model,
                     noise_scheduler=noise_scheduler,
@@ -142,7 +149,7 @@ def eval_policy(
                     network_params=network_params,
                     normalization_stats=normalization_stats,
                     actions_taken=actions_taken,
-                    goal_preprocessed=True if progressive_goals else False,
+                    goal_preprocessed=goal_preprocessed,
                 )
                 action_queue.extend(action_chunk)
             if step > max_steps:
@@ -166,10 +173,9 @@ def eval_policy(
         sum(episode_results["max_reward"]) / num_episodes
     )
     if not progressive_goals:
-        episode_results["last_goal"] = goal["pixels"]
+        episode_results["last_goal"] = desired_goal["pixels"]
     else:
-        episode_results["last_goal"] = behavioral_goal
-        episode_results["starting_state"] = s["pixels"]
+        episode_results["last_goal"] = behavioral_goal["pixels"]
         episode_results["closest_expert"] = goals[0]
 
     # video_files = list(Path(video_path).rglob("*.mp4"))
