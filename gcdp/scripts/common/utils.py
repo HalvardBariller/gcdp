@@ -146,10 +146,10 @@ def set_global_seed(seed):
         torch.backends.cudnn.benchmark = False
 
 
-def get_demonstration_statistics():
+def get_demonstration_statistics(path="objects/demonstration_statistics.npz"):
     """Load the statistics of the demonstrations."""
     demonstration = np.load(
-        "objects/demonstration_statistics.npz",
+        path,
         allow_pickle=True,
     )
     demonstration_statistics = {

@@ -27,7 +27,6 @@ def eval_policy(
     max_steps: int,
     model,
     noise_scheduler,
-    observations,
     device,
     network_params,
     normalization_stats,
@@ -53,7 +52,6 @@ def eval_policy(
         seed (int): Random seed for environment setup.
         model: Neural network model used for policy decision.
         noise_scheduler: Scheduler for noise process in policy execution.
-        observations: Initial state observations for the policy.
         device: Computation device (CPU/GPU) for model operations.
         network_params (dict): Parameters specific to the neural network model.
         normalization_stats: Statistics for normalizing input data.
@@ -65,19 +63,9 @@ def eval_policy(
     Returns:
         dict: A dictionary containing the success rate, average rewards, and details of the last goal.
     """
-    # model = kwargs["model"]
-    # noise_scheduler = kwargs["noise_scheduler"]
-    # observations = kwargs["observations"]
-    # device = kwargs["device"]
-    # network_params = kwargs["network_params"]
-    # normalization_stats = kwargs["normalization_stats"]
-    # successes = kwargs["successes"]
-
     len_successes = len(successes)
-
     actions_taken = network_params["action_horizon"]
     obs_horizon = network_params["obs_horizon"]
-
     episode_results = {
         "success": [],
         "rewards": [],

@@ -103,3 +103,9 @@ wandb:
   enable: true
   disable_artifact: true
   project: GCDP
+
+
+eval_generalisation:
+  num_episodes: 1
+  max_steps: 300
+  save_video: false
