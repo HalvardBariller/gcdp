@@ -1,4 +1,4 @@
-"""Train the model from a configuration file."""
+"""Train a model from a dataset of expert demonstrations using relabelling."""
 
 import warnings
 

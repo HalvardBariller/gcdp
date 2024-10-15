@@ -1,4 +1,4 @@
-"""This script contains the function to evaluate a policy in a Gym environment."""
+"""This script contains the function to evaluate the policy in a Gym environment."""
 
 import collections
 import os

@@ -1,4 +1,4 @@
-"""Train the model from a configuration file."""
+"""Train a model from scratch using self-play and relabelling."""
 
 import warnings
 

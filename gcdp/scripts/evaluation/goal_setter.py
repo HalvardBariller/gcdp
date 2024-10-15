@@ -1,4 +1,4 @@
-"""This script contains functions for setting goals that will be used during evaluation."""
+"""This script contains functions for setting goals in a curriculum manner that will be used during evaluation."""
 
 import numpy as np
 import torch

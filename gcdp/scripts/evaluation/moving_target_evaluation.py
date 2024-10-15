@@ -1,6 +1,7 @@
 """Evaluate the model on the moving target environment."""
 
 import collections
+import logging
 import gymnasium as gym
 import hydra
 import os
@@ -16,6 +17,13 @@ from torch import nn
 
 from gcdp.model.modeling import make_diffusion_model
 from gcdp.model.policy import diff_policy
+from gcdp.scripts.common.logger import (
+    init_logging,
+    Logger,
+    log_eval_info,
+    log_output_dir,
+    log_train_info,
+)
 from gcdp.scripts.common.utils import (
     get_demonstration_statistics,
     set_global_seed,
@@ -28,9 +36,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def load_model(cfg: DictConfig) -> nn.Module:
     """Build the model and load the weights."""
     script_dir = Path().resolve()
+    # model_dir = (
+    #     script_dir
+    #     / "runs/outputs/train/2024-09-06/16-30-06_evengoals_wo_curr/diffusion_model.pth"
+    # )
     model_dir = (
         script_dir
-        / "runs/outputs/train/2024-09-06/16-30-06_evengoals_wo_curr/diffusion_model.pth"
+        / "/home/bariller/GCDP/runs/outputs/train/2024-09-06/17-27-22_randomgoals_wo_curr/diffusion_model.pth"
     )
     nets, ema_nets, _, noise_scheduler = make_diffusion_model(cfg)
     model = torch.load(model_dir, map_location=device)
@@ -85,12 +97,12 @@ def eval_policy(
         "goal_curriculum": [],
     }
     for episode in tqdm.tqdm(range(num_episodes)):
-        if save_video and episode == num_episodes - 1:
-            env.metadata["render_fps"] = 10
+        # if save_video and episode == num_episodes - 1:
+        if save_video:
+            path = os.path.join(video_path, f"episode_{episode}")
             env = RecordVideo(
-                env, video_path, disable_logger=True, name_prefix=video_prefix
+                env, path, disable_logger=True, name_prefix=video_prefix
             )
-            print("FPS", env.metadata["render_fps"])
         seed += 1
         task_completed = False
         # Keep track of the planned actions
@@ -172,7 +184,10 @@ def eval_moving_target(
     job_name: str,
 ) -> None:
     """Evaluate on moving targets."""
+    init_logging()
     set_global_seed(cfg.seed)
+    logger = Logger(cfg, out_dir, wandb_job_name=job_name)
+    log_output_dir(out_dir)
     env = gym.make(
         "gym_pusht/PushT-v0",
         obs_type="pixels_agent_pos",
@@ -191,8 +206,9 @@ def eval_moving_target(
     stats_path = Path().resolve() / "objects/demonstration_statistics.npz"
     success_path = Path().resolve() / "objects/designed_success.pkl"
     demonstration_statistics = get_demonstration_statistics(path=stats_path)
-    video_path = "video/pusht/" + job_name
+    video_path = "video/pusht/changing_eval/" + job_name
     video_prefix = "pusht_changing_goal"
+    logging.info("Evaluating Model.")
     with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
         eval_results = eval_policy(
             env=env,
@@ -216,6 +232,19 @@ def eval_moving_target(
         last_goal = (last_goal * 255).astype(np.uint8)
         last_goal = Image.fromarray(last_goal)
         last_goal.save(os.path.join(out_dir, "last_goal.png"))
+        if cfg.wandb.enable:
+            step = 1
+            eval_results["policy_refinement"] = 1
+            log_eval_info(logger, eval_results, step, cfg, "eval")
+            logger.log_image(
+                eval_results["last_goal"],
+                "goal_conditioning",
+                step,
+                mode="eval",
+            )
+            logger.log_video(
+                str(eval_results["rollout_video"]), step, mode="eval"
+            )
 
 
 @hydra.main(

@@ -102,10 +102,10 @@ evaluation:
 wandb:
   enable: true
   disable_artifact: true
-  project: GCDP
+  project: GCDP_ChangingGoals
 
 
 eval_generalisation:
-  num_episodes: 1
+  num_episodes: 3
   max_steps: 300
-  save_video: false
+  save_video: true
