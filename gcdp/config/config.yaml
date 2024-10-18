@@ -18,7 +18,7 @@ env:
 
 data_generation:
   episode_length: 100
-  num_episodes: 10
+  num_episodes: 20
   get_block_poses: true
   enrich_data: true
   get_original_goal: false
@@ -102,10 +102,10 @@ evaluation:
 wandb:
   enable: true
   disable_artifact: true
-  project: GCDP_ChangingGoals
+  project: GCDP_Exploration
 
 
 eval_generalisation:
-  num_episodes: 3
+  num_episodes: 30
   max_steps: 300
   save_video: true

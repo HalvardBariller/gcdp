@@ -69,7 +69,7 @@ def build_params(cfg: DictConfig) -> dict:
     return params
 
 
-def eval_policy(
+def eval_policy_moving_target(
     env,
     dummy_env,
     success_path,
@@ -210,7 +210,7 @@ def eval_moving_target(
     video_prefix = "pusht_changing_goal"
     logging.info("Evaluating Model.")
     with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
-        eval_results = eval_policy(
+        eval_results = eval_policy_moving_target(
             env=env,
             dummy_env=dummy_env,
             success_path=success_path,

@@ -1,11 +1,15 @@
 """Define utility functions for training the model."""
 
+import gymnasium as gym
 import numpy as np
 import pickle
 import torch
 import torch.nn as nn
 
 from omegaconf import DictConfig
+from pathlib import Path
+
+from gcdp.model.modeling import make_diffusion_model
 
 
 def get_demonstration_successes(file_path):
@@ -15,6 +19,38 @@ def get_demonstration_successes(file_path):
     for item in successes:
         item["pixels"] = item["pixels"].astype(np.float64)
     return successes
+
+
+def load_model(
+    cfg: DictConfig,
+    model: str = "default_randomgoals",
+    model_path: str = None,
+) -> nn.Module:
+    """Build the model and load the weights."""
+    script_dir = Path().resolve()
+    if model == "default_randomgoals":
+        model_dir = (
+            script_dir
+            / "/home/bariller/GCDP/runs/outputs/train/2024-09-06/17-27-22_randomgoals_wo_curr/diffusion_model.pth"
+        )
+    elif model == "default_evengoals":
+        model_dir = (
+            script_dir
+            / "runs/outputs/train/2024-09-06/16-30-06_evengoals_wo_curr/diffusion_model.pth"
+        )
+    else:
+        if model_path is None:
+            raise ValueError(
+                "Model name not recognized and model path not provided."
+            )
+        else:
+            model_dir = script_dir / model_path
+    nets, ema_nets, ema, noise_scheduler = make_diffusion_model(cfg)
+    model = torch.load(model_dir, map_location=cfg.device)
+    nets.load_state_dict(model)
+    ema_nets.load_state_dict(model)
+    ema.load_state_dict(model)
+    return nets, ema_nets, ema, noise_scheduler
 
 
 def build_params(cfg: DictConfig) -> dict:
@@ -112,3 +148,24 @@ def compute_loss(nbatch, params, nets, noise_scheduler, cfg):
     )
     loss = nn.functional.mse_loss(noise_pred, noise, reduction="none")
     return loss.mean()
+
+
+def get_moving_goal_pose(target_coordinates):
+    """Get the moving goal pose for the Push-T environment.
+
+    Args:
+        target_coordinates: The target coordinates of the goal obtained from the environment initialized.
+    Returns:
+        desired_goal: The moving goal image.
+    """
+    dummy_env = gym.make(
+        "gym_pusht/PushT-v0",
+        obs_type="pixels_agent_pos",
+        render_mode="rgb_array",
+        random_target=True,
+        legacy=False,
+    )
+    desired_goal, _ = dummy_env.reset(target_coordinates=target_coordinates)
+    dummy_env.close()
+    desired_goal = {"pixels": desired_goal["pixels"] / 255.0}
+    return desired_goal

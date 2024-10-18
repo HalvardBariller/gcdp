@@ -85,13 +85,36 @@ class ScaleRewardWrapper(gym.RewardWrapper):
         return (next_state, reward, term, trunc, info)
 
 
-def pusht_init_env(sparse_reward=True):
-    """Initialize the environment for the PUSHT task."""
-    env = gym.make(
-        "gym_pusht/PushT-v0",
-        obs_type="pixels_agent_pos",
-        render_mode="rgb_array",
-    )
+def pusht_init_env(sparse_reward=True, random_target=False, dummy_env=False):
+    """Initialize the environment for the PUSHT task.
+
+    Args:
+        sparse_reward: Whether to use the sparse reward wrapper.
+        random_target: Whether to use a random position for the target.
+    Returns:
+        env: The initialized environment.
+    """
+    if random_target:
+        env = gym.make(
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
+            random_target=True,
+        )
+        if dummy_env:
+            env = gym.make(
+                "gym_pusht/PushT-v0",
+                obs_type="pixels_agent_pos",
+                render_mode="rgb_array",
+                random_target=True,
+                legacy=False,
+            )
+    else:
+        env = gym.make(
+            "gym_pusht/PushT-v0",
+            obs_type="pixels_agent_pos",
+            render_mode="rgb_array",
+        )
     return env if not sparse_reward else ScaleRewardWrapper(env)
 
 

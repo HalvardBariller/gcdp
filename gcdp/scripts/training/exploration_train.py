@@ -54,42 +54,45 @@ from gcdp.scripts.common.visualisations import (
 from gcdp.scripts.datasets.episodes import (
     build_dataset,
     get_guided_rollout,
+    get_guided_rollout_moving_env,
     get_random_rollout,
 )
 from gcdp.scripts.datasets.expert_datasets import custom_collate_fn
-from gcdp.scripts.evaluation.eval import (
-    eval_policy,
-    eval_policy_on_interm_goals,
-)
 from gcdp.scripts.datasets.trajectory_expert import (
     batch_normalize_expert_input,
     build_expert_dataset,
     load_expert_dataset,
 )
+from gcdp.scripts.evaluation.eval import (
+    eval_policy,
+    eval_policy_on_interm_goals,
+)
+from gcdp.scripts.evaluation.moving_target_evaluation import (
+    eval_policy_moving_target,
+)
+
 from gcdp.scripts.training.training_utils import (
     compute_loss,
     build_params,
     get_demonstration_successes,
+    load_model,
 )
 
 
 def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
     """Training of the model."""
     init_logging()
-    env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
-    demonstration_statistics = get_demonstration_statistics()
-    successes = get_demonstration_successes("objects/successes.pkl")
-    designed_success = get_demonstration_successes(
-        "objects/designed_success.pkl"
+    env = pusht_init_env(
+        sparse_reward=cfg.env.sparse_reward, random_target=True
     )
+    demonstration_statistics = get_demonstration_statistics()
     expert_dataset = load_expert_dataset(cfg)
-    evaluation_expert_dataset = load_expert_dataset(cfg, timestamps=False)
     logger = Logger(cfg, out_dir, wandb_job_name=job_name)
     set_global_seed(cfg.seed)
     log_output_dir(out_dir)
     grad_scaler = GradScaler(enabled=cfg.use_amp)
-    logging.info("Building Diffusion Model.")
-    nets, ema_nets, ema, noise_scheduler = make_diffusion_model(cfg)
+    logging.info("Loading Diffusion Model.")
+    nets, ema_nets, ema, noise_scheduler = load_model(cfg=cfg)
     num_parameters_noise = sum(
         p.numel() for p in nets["noise_pred_net"].parameters()
     )
@@ -132,12 +135,42 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
         )
         # Initial random rollout
         if p == 0:
+            trajectories = [
+                get_guided_rollout_moving_env(
+                    episode_length=cfg.data_generation.episode_length,
+                    env=env,
+                    model=ema_nets,
+                    device=cfg.device,
+                    network_params=params,
+                    normalization_stats=demonstration_statistics,
+                    noise_scheduler=noise_scheduler,
+                )
+                for _ in range(cfg.data_generation.num_episodes)
+            ]
+            dataset = build_dataset(
+                cfg, trajectories, demonstration_statistics
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=cfg.training.batch_size,
+                shuffle=True,
+                num_workers=cfg.training.num_workers,
+                pin_memory=True,
+            )
+            logging.info(f"Number of training examples: {len(dataset)}")
+            optimizer, lr_scheduler = make_optimizer_and_scheduler(
+                cfg, nets, num_batches=len(dataloader)
+            )
+        # Expert dataset (avoid forgetting)
+        elif (p + 1) % 10 == 0:
             dataset = build_expert_dataset(
                 cfg,
                 expert_dataset,
                 cfg.expert_data.num_episodes,
             )
-            logging.info(f"Number of training examples: {len(dataset)}")
+            logging.info(
+                f"Number of training examples: {len(dataset)}"
+            )  # 24,208?
             dataloader = DataLoader(
                 dataset,
                 batch_size=cfg.training.batch_size,
@@ -149,31 +182,31 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     True if cfg.training.num_workers > 0 else False
                 ),
             )
-            optimizer, lr_scheduler = make_optimizer_and_scheduler(
-                cfg, nets, num_batches=len(dataloader)
-            )
         # Rollout with refined policy
         else:
-            if cfg.expert_data.num_episodes != expert_dataset.num_episodes:
-                dataset = build_expert_dataset(
-                    cfg,
-                    expert_dataset,
-                    cfg.expert_data.num_episodes,
+            trajectories = [
+                get_guided_rollout_moving_env(
+                    episode_length=cfg.data_generation.episode_length,
+                    env=env,
+                    model=ema_nets,
+                    device=cfg.device,
+                    network_params=params,
+                    normalization_stats=demonstration_statistics,
+                    noise_scheduler=noise_scheduler,
                 )
-                logging.info(
-                    f"Number of training examples: {len(dataset)}"
-                )  # 24,208?
-                dataloader = DataLoader(
-                    dataset,
-                    batch_size=cfg.training.batch_size,
-                    shuffle=True,
-                    num_workers=cfg.training.num_workers,
-                    pin_memory=True,
-                    collate_fn=custom_collate_fn,
-                    persistent_workers=(
-                        True if cfg.training.num_workers > 0 else False
-                    ),
-                )
+                for _ in range(cfg.data_generation.num_episodes)
+            ]
+            dataset = build_dataset(
+                cfg, trajectories, demonstration_statistics
+            )
+            dataloader = torch.utils.data.DataLoader(
+                dataset,
+                batch_size=cfg.training.batch_size,
+                shuffle=True,
+                num_workers=cfg.training.num_workers,
+                pin_memory=True,
+            )
+            logging.info(f"Number of training examples: {len(dataset)}")
         # Training
         with tqdm.tqdm(
             range(cfg.training.num_epochs), desc="Epoch", leave=False
@@ -240,28 +273,32 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
 
         if cfg.evaluation.eval:
             logging.info("Evaluating Model.")
-            env = pusht_init_env(sparse_reward=cfg.env.sparse_reward)
-            video_path = "video/pusht/" + job_name
+            video_path = "video/pusht/exploration/" + job_name
             video_prefix = "pusht_policy_refinement_" + str(p)
+            env = pusht_init_env(
+                sparse_reward=cfg.env.sparse_reward, random_target=True
+            )
+            dummy_env = pusht_init_env(
+                sparse_reward=cfg.env.sparse_reward,
+                random_target=True,
+                dummy_env=True,
+            )
             with torch.no_grad(), torch.cuda.amp.autocast(enabled=cfg.use_amp):
-                eval_results = eval_policy(
+                eval_results = eval_policy_moving_target(
                     env=env,
-                    num_episodes=cfg.evaluation.num_episodes,
-                    max_steps=cfg.evaluation.max_steps,
-                    save_video=cfg.evaluation.save_video,
-                    video_path=video_path,
-                    video_prefix=video_prefix,
+                    dummy_env=dummy_env,
+                    success_path=None,
+                    num_episodes=cfg.eval_generalisation.num_episodes,
+                    max_steps=cfg.eval_generalisation.max_steps,
+                    save_video=cfg.eval_generalisation.save_video,
+                    network_params=params,
                     seed=cfg.seed,
                     model=ema_nets,
-                    # model=nets,
                     noise_scheduler=noise_scheduler,
-                    observations=cfg.model.obs_horizon,
                     device=cfg.device,
-                    network_params=params,
                     normalization_stats=demonstration_statistics,
-                    successes=designed_success,  # @TODO or successes=successes,
-                    progressive_goals=cfg.evaluation.progressive_goals,
-                    expert_dataset=evaluation_expert_dataset,
+                    video_path=video_path,
+                    video_prefix=video_prefix,
                     cfg=cfg,
                 )
             eval_results["policy_refinement"] = p + 1
@@ -286,29 +323,6 @@ def training_config(cfg: DictConfig, out_dir: str, job_name: str) -> None:
                     step,
                     mode="eval",
                 )
-                if (
-                    cfg.evaluation.progressive_goals
-                    and cfg.evaluation.save_progressive_goals
-                ):
-                    logger.log_image(
-                        eval_results["starting_state"],
-                        "starting_state",
-                        step,
-                        mode="eval",
-                    )
-                    logger.log_image(
-                        eval_results["closest_expert"],
-                        "closest_expert",
-                        step,
-                        mode="eval",
-                    )
-                    for i, x in enumerate(eval_results["goal_curriculum"]):
-                        logger.log_image_locally(
-                            np.moveaxis(x, 0, -1).astype(np.float32),
-                            f"goal_curriculum_{p}_{i}",
-                            "viz_curriculum",
-                        )
-
                 logger.log_video(
                     str(eval_results["rollout_video"]), step, mode="eval"
                 )

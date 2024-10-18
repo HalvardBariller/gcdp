@@ -17,6 +17,7 @@ from diffusers import DDPMScheduler, DDIMScheduler
 
 from gcdp.model.policy import diff_policy
 from gcdp.scripts.common.utils import ScaleRewardWrapper, normalize_data
+from gcdp.scripts.training.training_utils import get_moving_goal_pose
 
 
 def get_random_rollout(
@@ -164,9 +165,88 @@ def get_guided_rollout(
     }
 
 
+def get_guided_rollout_moving_env(
+    episode_length: int,
+    env: gym.Env,
+    model: torch.ModuleDict,
+    device: torch.device,
+    network_params: dict,
+    normalization_stats: dict,
+    noise_scheduler: DDPMScheduler | DDIMScheduler,
+    get_block_poses: bool = False,
+):
+    """
+    Simulate an episode of the moving target environment using the given policy.
+
+    Inputs:
+        episode_length : length of the simulation
+        env : gym environment
+        model: the model used to predict the action (vision and noise models)
+        noise_scheduler: the scheduler used to diffuse the noise
+        device: the device to use
+        network_params: the parameters of the network
+        normalization_stats: the statistics used to normalize the data
+        get_block_poses : whether to return the block poses (used for evaluation on intermediary goals)
+    Outputs:
+        dict containing the following
+            states : list of states (dicts) of the agent
+            actions : list of actions taken by the agent
+            reached_goals : list of states (dicts) of the agent after taking the actions
+            desired_goal : the goal that the agent was trying to reach
+        list of block poses corresponding to coordinates of reached goals (only if get_block_poses is True)
+    """
+    s, _ = env.reset()
+    goal_pose = env.get_wrapper_attr("goal_pose")
+    desired_goal = get_moving_goal_pose(goal_pose)
+    states = []
+    actions = []
+    reached_goals = []
+    observations = collections.deque(
+        [s] * network_params["obs_horizon"],
+        maxlen=network_params["obs_horizon"],
+    )
+    action_queue = collections.deque(maxlen=network_params["action_horizon"])
+    block_poses = []
+    while len(states) < episode_length:
+        if action_queue:
+            action = action_queue.popleft()
+            states.append(s)
+            observations.append(s)
+            actions.append(action)
+            s, _, _, _, infos = env.step(action)
+            reached_goals.append(s)
+            block_poses.append(infos["block_pose"])
+        else:
+            action_chunk = diff_policy(
+                model=model,
+                noise_scheduler=noise_scheduler,
+                observations=observations,
+                goal=desired_goal,
+                device=device,
+                network_params=network_params,
+                normalization_stats=normalization_stats,
+                actions_taken=network_params["action_horizon"],
+            )
+            action_queue.extend(action_chunk)
+    if get_block_poses:
+        return {
+            "states": states,
+            "actions": actions,
+            "reached_goals": reached_goals,
+            "desired_goal": desired_goal,
+        }, block_poses
+
+    return {
+        "states": states,
+        "actions": actions,
+        "reached_goals": reached_goals,
+        "desired_goal": desired_goal,
+    }
+
+
 def split_trajectory(trajectory: dict):
     """
-    Take a trajectory of length H and splits it into its different components.
+    Take a trajectory of length H and split it into its different components.
 
     Inputs:
         trajectory: dict containing the states, actions, reached goals and desired goal
@@ -189,7 +269,7 @@ def split_trajectory(trajectory: dict):
     reached_goals_pixels = np.array(
         [t["pixels"] for t in trajectory["reached_goals"]]
     )
-    desired_goal_agent_pos = np.array(trajectory["desired_goal"]["agent_pos"])
+    # desired_goal_agent_pos = np.array(trajectory["desired_goal"]["agent_pos"])
     desired_goal_pixels = np.array(trajectory["desired_goal"]["pixels"])
     return {
         "states_agent_pos": states_agent_pos,
@@ -197,9 +277,9 @@ def split_trajectory(trajectory: dict):
         "actions": actions,
         "reached_goals_agent_pos": reached_goals_agent_pos,
         "reached_goals_pixels": reached_goals_pixels,
-        "desired_goal_agent_pos": np.expand_dims(
-            desired_goal_agent_pos, axis=0
-        ),
+        # "desired_goal_agent_pos": np.expand_dims(
+        #     desired_goal_agent_pos, axis=0
+        # ),
         "desired_goal_pixels": np.expand_dims(desired_goal_pixels, axis=0),
     }
 
@@ -319,7 +399,7 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         train_action_data = []
         train_reached_goals_agent_pos = []
         train_reached_goals_image = []
-        train_desired_goal_agent_pos = []
+        # train_desired_goal_agent_pos = []
         train_desired_goal_image = []
 
         # if len(trajectories) > 1:
@@ -339,9 +419,9 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
                 split["reached_goals_agent_pos"]
             )
             train_reached_goals_image.append(split["reached_goals_pixels"])
-            train_desired_goal_agent_pos.append(
-                split["desired_goal_agent_pos"]
-            )
+            # train_desired_goal_agent_pos.append(
+            #     split["desired_goal_agent_pos"]
+            # )
             train_desired_goal_image.append(split["desired_goal_pixels"])
 
         # concatenate all trajectories (N transitions = sum over all T, T*H if
@@ -389,9 +469,9 @@ class PushTDatasetFromTrajectories(torch.utils.data.Dataset):
         }
 
         if get_original_goal:
-            self.train_data["desired_goal_agent_pos"] = np.concatenate(
-                train_desired_goal_agent_pos, axis=0
-            )  # (T, 2)
+            # self.train_data["desired_goal_agent_pos"] = np.concatenate(
+            #     train_desired_goal_agent_pos, axis=0
+            # )  # (T, 2)
             self.train_data["desired_goal_image"] = (
                 train_goal_image_data  # (T, 3, 96, 96)
             )
@@ -497,11 +577,11 @@ class EnrichedDataset(torch.utils.data.Dataset):
             # Original entry
             self.enriched_data.append(
                 {
-                    "agent_pos": agent_pos,
+                    "observation.state": agent_pos,
                     "action": action,
-                    "image": image,
-                    "reached_goal_agent_pos": reached_goal_agent_pos,
-                    "reached_goal_image": reached_goal_image,
+                    "observation.image": image,
+                    "reached_goal.state": reached_goal_agent_pos,
+                    "reached_goal.image": reached_goal_image,
                 }
             )
 
@@ -518,11 +598,11 @@ class EnrichedDataset(torch.utils.data.Dataset):
                 future_goal_image = future_item["reached_goal_image"]
                 self.enriched_data.append(
                     {
-                        "agent_pos": agent_pos,
+                        "observation.state": agent_pos,
                         "action": action,
-                        "image": image,
-                        "reached_goal_agent_pos": future_goal_pos,
-                        "reached_goal_image": future_goal_image,
+                        "observation.image": image,
+                        "reached_goal.state": future_goal_pos,
+                        "reached_goal.image": future_goal_image,
                     }
                 )
 
