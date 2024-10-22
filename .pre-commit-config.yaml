@@ -31,6 +31,7 @@ repos:
         args:
           - --config=pyproject.toml
           - --ignore=E203,E266,E501,W503,F403,F401,B905,D102,E402,F841
+          - --exclude=./gcdp/envs/gym-pusht
         additional_dependencies:
           [
             "flake8-blind-except",
